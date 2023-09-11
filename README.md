@@ -1,1 +1,2 @@
-Program to calculate an estimated penalty for a ski race by cross-referencing names of people signed up with world ranking
+Program to calculate the scores for a race by scraping date from scoring websites
+and referencing FIS ranking lists
