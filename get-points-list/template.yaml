@@ -1,0 +1,44 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  python3.9
+
+  Sample SAM Template for get-points-list
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 600
+    MemorySize: 3008
+
+Resources:
+  GetPointsListFunction:
+    Type: AWS::Serverless::Function 
+    Properties:
+      PackageType: Image
+      Architectures:
+        - x86_64
+      Events:
+        GetPointsList:
+          Type: Api 
+          Properties:
+            Path: /get-points-list
+            Method: get
+    Metadata:
+      Dockerfile: Dockerfile
+      DockerContext: ./src
+      DockerTag: python3.9-v1
+
+Outputs:
+  # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
+  # Find out more about other implicit resources you can reference within SAM
+  # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
+  GetPointsListApi:
+    Description: "API Gateway endpoint URL for Prod stage for GetPointsList function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/get-points-list/"
+  GetPointsListFunction:
+    Description: "GetPointsList Lambda Function ARN"
+    Value: !GetAtt GetPointsListFunction.Arn
+  GetPointsListFunctionIamRole:
+    Description: "Implicit IAM Role created for GetPointsList function"
+    Value: !GetAtt GetPointsListFunctionRole.Arn
