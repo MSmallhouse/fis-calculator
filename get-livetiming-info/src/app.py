@@ -11,20 +11,21 @@ import pandas as pd
 
 URL = "https://www.live-timing.com/race2.php?r=248437&u=0"
 
+# configuration values
+ENDPOINT = "fis-points-database.cby1setpagel.us-east-2.rds.amazonaws.com"
+USERNAME = "admin"
+PASSWORD = "password"
+DATABASE_NAME = "fis_points"
+
+# set up logger
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
-
-# configuration values
-endpoint = "fis-points-database.cby1setpagel.us-east-2.rds.amazonaws.com"
-username = "admin"
-password = "password"
-database_name = "fis_points"
 
 # create the database connection outside of the handler to allow connections to be
 # re-used by subsequent function invocations.
 try:
-        connection = pymysql.connect(host=endpoint, user=username, passwd=password,
-							         db=database_name, connect_timeout=5,
+        connection = pymysql.connect(host=ENDPOINT, user=USERNAME, passwd=PASSWORD,
+							         db=DATABASE_NAME, connect_timeout=5,
 									 cursorclass=pymysql.cursors.DictCursor)
 except pymysql.MySQLError as e:
     logger.error("ERROR: Unexpected error: Could not connect to MySQL instance.")
@@ -34,7 +35,7 @@ except pymysql.MySQLError as e:
 logger.info("SUCCESS: Connection to RDS for MySQL instance succeeded")
 
 def get_df_from_database(cursor):
-    # get df
+    # get df of full RDS database
     query = "SELECT * FROM fis_points.point_entries"
     cursor.execute(query)
     existing_data = cursor.fetchall()
@@ -55,6 +56,16 @@ def clean_name(name):
         # remove leading whitespace from first names, left over from splitting
         name[1] = name[1][1:-1]
     return name
+
+def get_split_names(full_names):
+    split_names = []
+    for name in full_names:
+        name = clean_name(name)
+        # function returns "" on error
+        if not name:
+            continue
+        split_names.append(name)
+    return split_names
 
 def get_times(driver):
     full_names = []
@@ -87,17 +98,7 @@ def get_times(driver):
             times.append(time)
     return times, full_names
 
-def get_split_names(full_names):
-    split_names = []
-    for name in full_names:
-        name = clean_name(name)
-        # function returns "" on error
-        if not name:
-            continue
-        split_names.append(name)
-    return split_names
-
-def handler(event=None, context=None):
+def get_driver():
     chrome_options = webdriver.ChromeOptions()
     chrome_options.binary_location = "/opt/chrome/chrome"
     chrome_options.add_argument("--headless")
@@ -114,21 +115,19 @@ def handler(event=None, context=None):
     #chrome_options.add_argument("--disk-cache-dir=/tmp/chrome-user-data")
 
     chrome_service = Service(executable_path=r'/opt/chromedriver')
-
     driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
+    return driver, chrome_service
+
+def handler(event=None, context=None):
+    driver, chrome_service = get_driver()
     driver.get(URL)
     driver.implicitly_wait(10)
-
 
     # list of times, with -1 corresponding to no time
     times, full_names = get_times(driver)
 
     # 2d list of names, with each inner list of format [last_name, first_name]
     split_names = get_split_names(full_names)
-
-
-    split_names_stub = split_names[0:4]
-    times_stub = times[0:3]
 
     with connection:
         with connection.cursor() as cursor:
@@ -137,6 +136,9 @@ def handler(event=None, context=None):
         # connection not autocommitted by default
         connection.commit()
     
+    split_names_stub = split_names[0:4]
+    times_stub = times[0:3]
+
     # make names lowercase for matching
     existing_df["Firstname"] = existing_df["Firstname"].str.lower()
     existing_df["Lastname"] = existing_df["Lastname"].str.lower()
@@ -146,8 +148,8 @@ def handler(event=None, context=None):
         first_name = name[1]
         mask = ((existing_df["Lastname"] == last_name) &
                 (existing_df["Firstname"] == first_name))
-        matching_rows = existing_df[mask]
-        print(matching_rows)
+        matching_row = existing_df[mask]
+        print(matching_row)
 
     # Close webdriver and chrome service
     driver.quit()
@@ -159,7 +161,6 @@ def handler(event=None, context=None):
     # B is top 5 points out of top 10
     # C is race points of the top 5 out of top 10
     # Any need to make sure that people in the top 5 actually start?
-    # If someone is a DNS1, they can't count
 
     # also have an input for event, since there's an event multiplier for race points
     # Race Points P = ((Tx/To) - 1) * F where:
