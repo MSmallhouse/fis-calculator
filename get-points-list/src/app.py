@@ -34,7 +34,8 @@ except pymysql.MySQLError as e:
 logger.info("SUCCESS: Connection to RDS for MySQL instance succeeded")
 
 def insert_update(df, cursor):
-	for row in df.iterrows():
+	for index, row in df.iterrows():
+		print(row)
 		# insert row if not already present in database
 		# if present, update already existing row
 		sql = """INSERT INTO `point_entries` (`Fiscode`, `Lastname`, `Firstname`,
@@ -134,6 +135,7 @@ def lambda_handler(event=None, context=None):
 
 	# competitors with no points will be labeled -1
 	df = df.fillna(-1)
+	df = df.head(1)
 
 	with connection:
 		with connection.cursor() as cursor:
