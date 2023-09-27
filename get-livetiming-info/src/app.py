@@ -1,13 +1,37 @@
 ## Run selenium and chrome driver to scrape data from cloudbytes.dev
-import time
-import json
-import os.path
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
+import sys
+import logging
+import pymysql
+import pymysql.cursors
+import pandas as pd
 
 URL = "https://www.live-timing.com/race2.php?r=248437&u=0"
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+# configuration values
+endpoint = "fis-points-database.cby1setpagel.us-east-2.rds.amazonaws.com"
+username = "admin"
+password = "password"
+database_name = "fis_points"
+
+# create the database connection outside of the handler to allow connections to be
+# re-used by subsequent function invocations.
+try:
+		connection = pymysql.connect(host=endpoint, user=username, passwd=password,
+							         db=database_name, connect_timeout=5,
+									 cursorclass=pymysql.cursors.DictCursor)
+except pymysql.MySQLError as e:
+    logger.error("ERROR: Unexpected error: Could not connect to MySQL instance.")
+    logger.error(e)
+    sys.exit()
+
+logger.info("SUCCESS: Connection to RDS for MySQL instance succeeded")
 
 def clean_name(name):
     # prevents from breaking if name has no comma for some reason
@@ -78,9 +102,46 @@ def handler(event=None, context=None):
             continue
         split_names.append(name)
 
-    print(len(split_names))
-    print(len(times))
+    split_names_stub = split_names[0:4]
+    times_stub = times[3]
+
+    with connection:
+        with connection.cursor() as cursor:
+            # get df
+            query = "SELECT * FROM fis_points.point_entries"
+            cursor.execute(query)
+            existing_data = cursor.fetchall()
+
+            column_names = ["Fiscode", "Lastname", "Firstname", "Competitorname", "DHpoints",
+                            "SLpoints", "GSpoints", "SGpoints", "ACpoints"]
+            existing_df = pd.DataFrame(existing_data, columns=column_names)
+
+        # connection not autocommitted by default
+        connection.commit()
+        connection.close()
+    
+    # make names lowercase for matching
+    existing_df["Firstname"] = existing_df["Firstname"].str.lower()
+    existing_df["Lastname"] = existing_df["Lastname"].str.lower()
+
+    for name in split_names_stub:
+         last_name = name[0]
+         first_name = name[1]
+         print(f"last_name: {last_name}")
+         print(f"first_name: {first_name}")
+         mask = ((existing_df["Lastname"] == last_name) &
+                 (existing_df["Firstname"] == first_name))
+         matching_rows = existing_df[mask]
+         print(matching_rows)
 
     # Close webdriver and chrome service
     driver.quit()
     chrome_service.stop()
+
+
+    #####################
+    ##    READ THIS    ##
+    #####################
+    # to reduce RDS usage, query database for all info just like in 
+    # get-points-list program
+    # then use pandas to figure out people's points info
