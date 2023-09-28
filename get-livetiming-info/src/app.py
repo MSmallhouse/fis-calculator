@@ -100,7 +100,9 @@ def get_times_and_full_names(driver):
     return times, full_names
 
 def add_points_to_racer_info(existing_df, racer_info):
-    # get points and add to racer_info
+    # get all points, for sorting later in part A calculation
+    all_points = []
+
     # make names lowercase for matching
     existing_df["Firstname"] = existing_df["Firstname"].str.lower()
     existing_df["Lastname"] = existing_df["Lastname"].str.lower()
@@ -108,14 +110,19 @@ def add_points_to_racer_info(existing_df, racer_info):
     for i, name in enumerate(racer_info):
         last_name = name[0]
         first_name = name[1]
+
+        # find racer in df by searching first and last name matches
         mask = ((existing_df["Lastname"] == last_name) &
                 (existing_df["Firstname"] == first_name))
         matching_row = existing_df[mask]
+
         if matching_row.empty:
             racer_info[i].append(-1)
         else:
-            racer_info[i].append(matching_row.iloc[0][EVENT])
-    return racer_info
+            points = matching_row.iloc[0][EVENT]
+            racer_info[i].append(points)
+            all_points.append(points)
+    return racer_info, all_points
 
 def get_driver():
     chrome_options = webdriver.ChromeOptions()
@@ -163,12 +170,16 @@ def handler(event=None, context=None):
         # connection not autocommitted by default
         connection.commit()
     
-    top_ten_times = racer_info[0:10]
-
     # add points to racer info
     # racer_info of format [[last_name, first_name, time, points]]
-    racer_info = add_points_to_racer_info(existing_df, racer_info)
+    # NOTE: points == -1 if racer not found in database
+    racer_info, all_points = add_points_to_racer_info(existing_df, racer_info)
     print(racer_info)
+
+    # NOTE: use all_points to calculate part A
+    # calculate C by race points
+    # Use top_ten_times to calculate B; based on race points so do C first
+    top_ten_times = racer_info[0:10]
 
 
     # Penalty Calculation: (A+B-C)/10
