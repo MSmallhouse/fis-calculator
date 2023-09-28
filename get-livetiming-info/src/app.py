@@ -10,6 +10,7 @@ import pymysql.cursors
 import pandas as pd
 
 URL = "https://www.live-timing.com/race2.php?r=248437&u=0"
+EVENT = "GSpoints"
 
 # configuration values
 ENDPOINT = "fis-points-database.cby1setpagel.us-east-2.rds.amazonaws.com"
@@ -67,7 +68,7 @@ def get_split_names(full_names):
         split_names.append(name)
     return split_names
 
-def get_times(driver):
+def get_times_and_full_names(driver):
     full_names = []
     times = []
     table = driver.find_element(By.ID, "resultTable")
@@ -98,6 +99,24 @@ def get_times(driver):
             times.append(time)
     return times, full_names
 
+def add_points_to_racer_info(existing_df, racer_info):
+    # get points and add to racer_info
+    # make names lowercase for matching
+    existing_df["Firstname"] = existing_df["Firstname"].str.lower()
+    existing_df["Lastname"] = existing_df["Lastname"].str.lower()
+
+    for i, name in enumerate(racer_info):
+        last_name = name[0]
+        first_name = name[1]
+        mask = ((existing_df["Lastname"] == last_name) &
+                (existing_df["Firstname"] == first_name))
+        matching_row = existing_df[mask]
+        if matching_row.empty:
+            racer_info[i].append(-1)
+        else:
+            racer_info[i].append(matching_row.iloc[0][EVENT])
+    return racer_info
+
 def get_driver():
     chrome_options = webdriver.ChromeOptions()
     chrome_options.binary_location = "/opt/chrome/chrome"
@@ -124,10 +143,18 @@ def handler(event=None, context=None):
     driver.implicitly_wait(10)
 
     # list of times, with -1 corresponding to no time
-    times, full_names = get_times(driver)
+    times, full_names = get_times_and_full_names(driver)
 
-    # 2d list of names, with each inner list of format [last_name, first_name]
-    split_names = get_split_names(full_names)
+    # Close webdriver and chrome service
+    driver.quit()
+    chrome_service.stop()
+
+    # initialize racer_info with split names
+    racer_info = get_split_names(full_names)
+
+    # add times to racer_info
+    for i, time in enumerate(times):
+        racer_info[i].append(time)
 
     with connection:
         with connection.cursor() as cursor:
@@ -136,24 +163,12 @@ def handler(event=None, context=None):
         # connection not autocommitted by default
         connection.commit()
     
-    split_names_stub = split_names[0:4]
-    times_stub = times[0:3]
+    top_ten_times = racer_info[0:10]
 
-    # make names lowercase for matching
-    existing_df["Firstname"] = existing_df["Firstname"].str.lower()
-    existing_df["Lastname"] = existing_df["Lastname"].str.lower()
-
-    for name in split_names_stub:
-        last_name = name[0]
-        first_name = name[1]
-        mask = ((existing_df["Lastname"] == last_name) &
-                (existing_df["Firstname"] == first_name))
-        matching_row = existing_df[mask]
-        print(matching_row)
-
-    # Close webdriver and chrome service
-    driver.quit()
-    chrome_service.stop()
+    # add points to racer info
+    # racer_info of format [[last_name, first_name, time, points]]
+    racer_info = add_points_to_racer_info(existing_df, racer_info)
+    print(racer_info)
 
 
     # Penalty Calculation: (A+B-C)/10
@@ -172,6 +187,9 @@ def handler(event=None, context=None):
         # Giant Slalom: F = 1010
         # Super-G: F = 1190
         # Alpine Combined: F = 1360
+
+    # Add thing to get minimum penalty from user
+
 
     #####################
     ##    READ THIS    ##
