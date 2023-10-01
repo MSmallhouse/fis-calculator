@@ -11,6 +11,9 @@ import pandas as pd
 
 URL = "https://www.live-timing.com/race2.php?r=248437&u=0"
 EVENT = "GSpoints"
+# NOTE: get event_multiplier from looking at event
+# hard-coded for now for simplicity
+EVENT_MULTIPLIER = 1010
 
 # configuration values
 ENDPOINT = "fis-points-database.cby1setpagel.us-east-2.rds.amazonaws.com"
@@ -143,7 +146,6 @@ def get_driver():
     chrome_service = Service(executable_path=r'/opt/chromedriver')
     driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
     return driver, chrome_service
-
 def handler(event=None, context=None):
     driver, chrome_service = get_driver()
     driver.get(URL)
@@ -174,17 +176,42 @@ def handler(event=None, context=None):
     # racer_info of format [[last_name, first_name, time, points]]
     # NOTE: points == -1 if racer not found in database
     racer_info, all_points = add_points_to_racer_info(existing_df, racer_info)
-    print(racer_info)
 
-    # NOTE: use all_points to calculate part A
+    # Get A - top 5 points out of top 10 finishers
+    top_ten_finishers = racer_info[:10]
+
+    # EDGE CASE: tie for 10th
+    i = 10
+    while racer_info[i][2] == racer_info[9][2]:
+        top_ten_finishers.append(racer_info[i])
+        i += 1
+
+    # Get A - best 5 points out of top 10 finishers
+    # sort top ten by points
+    # first sort takes care of edge case where 2 racers have same points
+    # solution: take racer w/ higher race points ie. higher index 2
+    top_ten_finishers.sort(key = lambda i: i[2], reverse=True)
+    top_ten_finishers.sort(key = lambda i: i[3])
+    A = 0
+    for finisher in top_ten_finishers[:5]:
+        A += finisher[3]
+
+    # Get B - top 5 points at start
+    all_points.sort()
+    B = sum(all_points[:5])
+
+def get_race_points(winner_time, finisher_time):
+    return ((winner_time/finisher_time) - 1) * EVENT_MULTIPLIER
+
+    winner_time = racer_info[0][2]
+    # EDGE CASE: 2 or more racers have 5th best points
+        # racer w/ higher race points is considered
     # calculate C by race points
-    # Use top_ten_times to calculate B; based on race points so do C first
-    top_ten_times = racer_info[0:10]
 
 
     # Penalty Calculation: (A+B-C)/10
-    # A is top 5 points at start
-    # B is top 5 points out of top 10
+    # B is top 5 points at start
+    # A is top 5 points out of top 10
     # C is race points of the top 5 out of top 10
     # Any need to make sure that people in the top 5 actually start?
 
