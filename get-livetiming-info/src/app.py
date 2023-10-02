@@ -14,6 +14,9 @@ EVENT = "GSpoints"
 # NOTE: get event_multiplier from looking at event
 # hard-coded for now for simplicity
 EVENT_MULTIPLIER = 1010
+# NOTE: get minimum penalty from user
+# hard-coded for now
+MINIMUM_PENALTY = 23
 
 # configuration values
 ENDPOINT = "fis-points-database.cby1setpagel.us-east-2.rds.amazonaws.com"
@@ -127,6 +130,40 @@ def add_points_to_racer_info(existing_df, racer_info):
             all_points.append(points)
     return racer_info, all_points
 
+def get_A_and_C(racer_info):
+    # Get A - top 5 points out of top 10 finishers
+    top_ten_finishers = racer_info[:10]
+
+    # EDGE CASE: tie for 10th
+    i = 10
+    while racer_info[i][2] == racer_info[9][2]:
+        top_ten_finishers.append(racer_info[i])
+        i += 1
+
+    # sort top ten by points
+    # first sort takes care of edge case where 2 racers have same points
+    # solution: take racer w/ higher race points ie. higher index 2
+    top_ten_finishers.sort(key = lambda i: i[2], reverse=True)
+    top_ten_finishers.sort(key = lambda i: i[3])
+    A = 0
+    for finisher in top_ten_finishers[:5]:
+        A += finisher[3]
+
+    C = 0
+    winner_time = racer_info[0][2]
+    for finisher in top_ten_finishers[:5]:
+        C += get_race_points(winner_time, finisher[2])
+
+    return A, C
+
+def get_B(all_points):
+    # Get B - top 5 points at start
+    all_points.sort()
+    return sum(all_points[:5])
+
+def get_race_points(winner_time, finisher_time):
+    return ((finisher_time/winner_time) - 1) * EVENT_MULTIPLIER
+
 def get_driver():
     chrome_options = webdriver.ChromeOptions()
     chrome_options.binary_location = "/opt/chrome/chrome"
@@ -177,33 +214,26 @@ def handler(event=None, context=None):
     # NOTE: points == -1 if racer not found in database
     racer_info, all_points = add_points_to_racer_info(existing_df, racer_info)
 
-    # Get A - top 5 points out of top 10 finishers
-    top_ten_finishers = racer_info[:10]
+    A, C = get_A_and_C(racer_info)
+    B = get_B(all_points)
 
-    # EDGE CASE: tie for 10th
-    i = 10
-    while racer_info[i][2] == racer_info[9][2]:
-        top_ten_finishers.append(racer_info[i])
-        i += 1
+    #NOTE: get minimum penalty as input
+    # penalty = max of minium penalty and below calculation
+    penalty = max((A+B-C)/10, MINIMUM_PENALTY)
 
-    # Get A - best 5 points out of top 10 finishers
-    # sort top ten by points
-    # first sort takes care of edge case where 2 racers have same points
-    # solution: take racer w/ higher race points ie. higher index 2
-    top_ten_finishers.sort(key = lambda i: i[2], reverse=True)
-    top_ten_finishers.sort(key = lambda i: i[3])
-    A = 0
-    for finisher in top_ten_finishers[:5]:
-        A += finisher[3]
-
-    # Get B - top 5 points at start
-    all_points.sort()
-    B = sum(all_points[:5])
-
-def get_race_points(winner_time, finisher_time):
-    return ((winner_time/finisher_time) - 1) * EVENT_MULTIPLIER
-
+    # for returning to website
+    # of form [last, first, score]
     winner_time = racer_info[0][2]
+    calculated_points = []
+    for racer in racer_info:
+        if racer[2] == -1:
+            score = -1
+        else:
+            score = penalty + get_race_points(winner_time, racer[2])
+        score = round(score, 2)
+        calculated_points.append([racer[0], racer[1], score])
+    print(calculated_points)
+
     # EDGE CASE: 2 or more racers have 5th best points
         # racer w/ higher race points is considered
     # calculate C by race points
