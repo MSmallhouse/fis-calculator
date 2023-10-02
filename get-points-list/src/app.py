@@ -139,12 +139,10 @@ def lambda_handler(event=None, context=None):
 
 	with connection:
 		with connection.cursor() as cursor:
-
 			# see what rows need to be changed
 			updated_and_new_df = dataframe_differential(df, cursor)
 
 			# update or insert necessary rows
 			insert_update(updated_and_new_df, cursor)
-
 		# connection not autocommitted by default
 		connection.commit()
