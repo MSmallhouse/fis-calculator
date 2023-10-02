@@ -9,13 +9,12 @@ import pymysql
 import pymysql.cursors
 import pandas as pd
 
+# NOTE: get URL, EVENT, MINIMUM_PENALTY from user
+# figure out EVENT_MULTIPLIER based on EVENT
+# hard-coded these for now
 URL = "https://www.live-timing.com/race2.php?r=248437&u=0"
 EVENT = "GSpoints"
-# NOTE: get event_multiplier from looking at event
-# hard-coded for now for simplicity
 EVENT_MULTIPLIER = 1010
-# NOTE: get minimum penalty from user
-# hard-coded for now
 MINIMUM_PENALTY = 23
 
 # configuration values
@@ -183,6 +182,7 @@ def get_driver():
     chrome_service = Service(executable_path=r'/opt/chromedriver')
     driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
     return driver, chrome_service
+
 def handler(event=None, context=None):
     driver, chrome_service = get_driver()
     driver.get(URL)
@@ -202,26 +202,22 @@ def handler(event=None, context=None):
     for i, time in enumerate(times):
         racer_info[i].append(time)
 
+    # get points from database
     with connection:
         with connection.cursor() as cursor:
             existing_df = get_df_from_database(cursor)
-
         # connection not autocommitted by default
         connection.commit()
     
-    # add points to racer info
     # racer_info of format [[last_name, first_name, time, points]]
     # NOTE: points == -1 if racer not found in database
     racer_info, all_points = add_points_to_racer_info(existing_df, racer_info)
 
     A, C = get_A_and_C(racer_info)
     B = get_B(all_points)
-
-    #NOTE: get minimum penalty as input
-    # penalty = max of minium penalty and below calculation
     penalty = max((A+B-C)/10, MINIMUM_PENALTY)
 
-    # for returning to website
+    # calculated_points for returning to website
     # of form [last, first, score]
     winner_time = racer_info[0][2]
     calculated_points = []
@@ -232,20 +228,12 @@ def handler(event=None, context=None):
             score = penalty + get_race_points(winner_time, racer[2])
         score = round(score, 2)
         calculated_points.append([racer[0], racer[1], score])
-    print(calculated_points)
-
-    # EDGE CASE: 2 or more racers have 5th best points
-        # racer w/ higher race points is considered
-    # calculate C by race points
-
 
     # Penalty Calculation: (A+B-C)/10
     # B is top 5 points at start
     # A is top 5 points out of top 10
     # C is race points of the top 5 out of top 10
-    # Any need to make sure that people in the top 5 actually start?
 
-    # also have an input for event, since there's an event multiplier for race points
     # Race Points P = ((Tx/To) - 1) * F where:
     # To = Time of winner in seconds
     # Tx = Time of a given competitor in seconds
@@ -255,13 +243,3 @@ def handler(event=None, context=None):
         # Giant Slalom: F = 1010
         # Super-G: F = 1190
         # Alpine Combined: F = 1360
-
-    # Add thing to get minimum penalty from user
-
-
-    #####################
-    ##    READ THIS    ##
-    #####################
-    # to reduce RDS usage, query database for all info just like in 
-    # get-points-list program
-    # then use pandas to figure out people's points info
