@@ -12,11 +12,13 @@ import pandas as pd
 import json
 
 # TODO: implement racers as objects for easier passing around
+# TODO: check state as page is currently running
+        # saved this page https://www.live-timing.com/race2.php?r=253687
 
 # NOTE: get URL, EVENT, MINIMUM_PENALTY from user
 # figure out EVENT_MULTIPLIER based on EVENT
 # hard-coded these for now
-URL = "https://www.live-timing.com/race2.php?r=253689"
+URL = "https://www.live-timing.com/race2.php?r=253691"
 EVENT = "SLpoints"
 EVENT_MULTIPLIER = 730
 MINIMUM_PENALTY = 23
@@ -131,7 +133,8 @@ def add_points_to_racer_info(existing_df, racer_info):
         if matching_row.empty:
             # racer not found
             print(f"\n\n Racer {first_name}, {last_name}'s points not found in database\n\n")
-            racer_info[i].append(-1)
+            # assume they don't have points
+            racer_info[i].append(999.99)
         else:
             points = matching_row.iloc[0][EVENT]
             if points == -1:
