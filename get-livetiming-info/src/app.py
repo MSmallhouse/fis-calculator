@@ -4,17 +4,21 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 import sys
+import re
 import logging
 import pymysql
 import pymysql.cursors
 import pandas as pd
+import json
+
+# TODO: implement racers as objects for easier passing around
 
 # NOTE: get URL, EVENT, MINIMUM_PENALTY from user
 # figure out EVENT_MULTIPLIER based on EVENT
 # hard-coded these for now
-URL = "https://www.live-timing.com/race2.php?r=248437&u=0"
-EVENT = "GSpoints"
-EVENT_MULTIPLIER = 1010
+URL = "https://www.live-timing.com/race2.php?r=253689"
+EVENT = "SLpoints"
+EVENT_MULTIPLIER = 730
 MINIMUM_PENALTY = 23
 
 # configuration values
@@ -89,10 +93,13 @@ def get_times_and_full_names(driver):
                 continue
             full_names.append(cols[2].text)
             # [:-1] splice removes trailing whitespace
-            time = cols[-1].text[:-1]
-            # calculate time in seconds, but only for those who finished
+            time = cols[-1].text
+            
+            # reg ex to remove place ex: (1) and whitespace from time
+            time = re.sub(r'\s*\(\d+\)$', '', time.strip())
 
-            if not time:
+            # calculate time in seconds, but only for those who finished
+            if not time or time == "DNF" or time == "DNS":
                 time = float(-1)
             # edge case for times under a minute
             elif ":" not in time:
@@ -122,10 +129,19 @@ def add_points_to_racer_info(existing_df, racer_info):
         matching_row = existing_df[mask]
 
         if matching_row.empty:
+            # racer not found
+            print(f"\n\n Racer {first_name}, {last_name}'s points not found in database\n\n")
             racer_info[i].append(-1)
         else:
             points = matching_row.iloc[0][EVENT]
-            racer_info[i].append(points)
+            if points == -1:
+                # assume racer has no points
+                # TODO: could check to be sure that racer actually has no points, and check 
+                        # that this works properly
+                racer_info[i].append(999.99)
+            else:
+                racer_info[i].append(points)
+
             all_points.append(points)
     return racer_info, all_points
 
@@ -183,7 +199,17 @@ def get_driver():
     driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
     return driver, chrome_service
 
-def handler(event=None, context=None):
+def handler(event, context):
+    #try:
+    #    return {
+    #        "statusCode": 200,
+    #        "body": json.dumps("Hello from Lambda!")
+    #    }
+    #except Exception as e:
+    #    return {
+    #        "statusCode": 500,
+    #        "body": json.dumps({"error": str(e)})
+    #    }
     driver, chrome_service = get_driver()
     driver.get(URL)
     driver.implicitly_wait(10)
@@ -213,6 +239,11 @@ def handler(event=None, context=None):
     # NOTE: points == -1 if racer not found in database
     racer_info, all_points = add_points_to_racer_info(existing_df, racer_info)
 
+    # re-make all_points list to reflect adding 999.99 to calculation
+    all_points = []
+    for racer in racer_info:
+        all_points.append(racer[-1])
+
     A, C = get_A_and_C(racer_info)
     B = get_B(all_points)
     penalty = max((A+B-C)/10, MINIMUM_PENALTY)
@@ -228,7 +259,11 @@ def handler(event=None, context=None):
             score = penalty + get_race_points(winner_time, racer[2])
         score = round(score, 2)
         calculated_points.append([racer[0], racer[1], score])
+    
+    for racer in calculated_points:
+        print(racer)
 
+    
     # Penalty Calculation: (A+B-C)/10
     # B is top 5 points at start
     # A is top 5 points out of top 10
