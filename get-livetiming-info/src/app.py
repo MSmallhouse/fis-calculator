@@ -202,17 +202,7 @@ def get_driver():
     driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
     return driver, chrome_service
 
-def handler(event, context):
-    #try:
-    #    return {
-    #        "statusCode": 200,
-    #        "body": json.dumps("Hello from Lambda!")
-    #    }
-    #except Exception as e:
-    #    return {
-    #        "statusCode": 500,
-    #        "body": json.dumps({"error": str(e)})
-    #    }
+def get_points():
     driver, chrome_service = get_driver()
     driver.get(URL)
     driver.implicitly_wait(10)
@@ -263,8 +253,7 @@ def handler(event, context):
         score = round(score, 2)
         calculated_points.append([racer[0], racer[1], score])
     
-    for racer in calculated_points:
-        print(racer)
+    return calculated_points
 
     
     # Penalty Calculation: (A+B-C)/10
@@ -281,3 +270,17 @@ def handler(event, context):
         # Giant Slalom: F = 1010
         # Super-G: F = 1190
         # Alpine Combined: F = 1360
+
+
+def handler(event, context):
+    try:
+        points = get_points()
+        return {
+            "statusCode": 200,
+            "body": json.dumps(points)
+        }
+    except Exception as e:
+        return {
+            "statusCode": 500,
+            "body": json.dumps({"error": str(e)})
+        }
