@@ -1,16 +1,16 @@
-const lambdaEndpoint = "https://imvf3e6jot4nih4i5th43endj40jbfqa.lambda-url.us-east-2.on.aws/";
+const lambdaURL = "https://imvf3e6jot4nih4i5th43endj40jbfqa.lambda-url.us-east-2.on.aws/";
 
 const url = document.getElementById("urlInput");
 const submitResponse = document.getElementById("response");
 const form = document.getElementById("userInfo");
-form.setAttribute("action", lambdaEndpoint);
+form.setAttribute("action", lambdaURL);
 form.setAttribute("method", "get");
 
 form.onsubmit = e => {
     e.preventDefault();
 
 
-    fetch(`${lambdaEndpoint}?url=${encodeURIComponent(url)}`)
+    fetch(`${lambdaURL}?url=${encodeURIComponent(url)}`)
         .then(response => response.json())
         .then(data => {
             // handle response from Lambda function
