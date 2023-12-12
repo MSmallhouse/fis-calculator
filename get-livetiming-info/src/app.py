@@ -11,15 +11,20 @@ import pymysql.cursors
 import pandas as pd
 import json
 
-# TODO: implement racers as objects for easier passing around
-# TODO: check state as page is currently running
-        # saved this page https://www.live-timing.com/race2.php?r=253687
+class Race:
+    def __init__(self, url, min_penalty, event):
+        self.url = url
+        self.min_penalty = int(min_penalty)
 
-# NOTE: get URL, EVENT, MINIMUM_PENALTY from user
-# figure out EVENT_MULTIPLIER based on EVENT
-# hard-coded these for now
-
-
+        self.event = event
+        if event == "SLpoints":
+            self.event_multiplier = 730
+        if event == "GSpoints":
+            self.event_multiplier = 1010
+        if event == "SGpoints":
+            self.event_multiplier = 1190
+        if event == "DHpoints":
+            self.event_multiplier = 1250
 
 def get_df_from_database(cursor):
     # get df of full RDS database
@@ -34,7 +39,7 @@ def get_df_from_database(cursor):
 def clean_name(name):
     # prevents from breaking if name has no comma for some reason
     if "," not in name:
-        print(f"skipping name: {name}")
+        print(f"ERROR: {name} could not be parsed correctly")
         return ""
 
     name = name.lower()
@@ -107,7 +112,7 @@ def add_points_to_racer_info(existing_df, racer_info, EVENT):
 
         if matching_row.empty:
             # racer not found
-            print(f"\n\n Racer {first_name}, {last_name}'s points not found in database\n\n")
+            print(f"ERROR: Racer {first_name}, {last_name}'s points not found in database")
             # assume they don't have points
             racer_info[i].append(999.99)
         else:
@@ -177,8 +182,13 @@ def get_driver():
     driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
     return driver, chrome_service
 
-def get_points(url, EVENT, EVENT_MULTIPLIER, MINIMUM_PENALTY, ENDPOINT,
-                            USERNAME, PASSWORD, DATABASE_NAME):
+def get_points(race):
+    # database configuration values
+    ENDPOINT = "fis-points-database.cby1setpagel.us-east-2.rds.amazonaws.com"
+    USERNAME = "admin"
+    PASSWORD = "password"
+    DATABASE_NAME = "fis_points"
+
     # set up logger
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
@@ -197,7 +207,7 @@ def get_points(url, EVENT, EVENT_MULTIPLIER, MINIMUM_PENALTY, ENDPOINT,
 
     # set up selenium driver
     driver, chrome_service = get_driver()
-    driver.get(url)
+    driver.get(race.url)
     driver.implicitly_wait(10)
 
     # list of times, with -1 corresponding to no time
@@ -223,16 +233,16 @@ def get_points(url, EVENT, EVENT_MULTIPLIER, MINIMUM_PENALTY, ENDPOINT,
     
     # racer_info of format [[last_name, first_name, time, points]]
     # NOTE: points == -1 if racer not found in database
-    racer_info, all_points = add_points_to_racer_info(existing_df, racer_info, EVENT)
+    racer_info, all_points = add_points_to_racer_info(existing_df, racer_info, race.event)
 
     # re-make all_points list to reflect adding 999.99 to calculation
     all_points = []
     for racer in racer_info:
         all_points.append(racer[-1])
 
-    A, C = get_A_and_C(racer_info, EVENT_MULTIPLIER)
+    A, C = get_A_and_C(racer_info, race.event_multiplier)
     B = get_B(all_points)
-    penalty = max((A+B-C)/10, MINIMUM_PENALTY)
+    penalty = max((A+B-C)/10, race.min_penalty)
 
     # calculated_points for returning to website
     # of form [last, first, score]
@@ -242,13 +252,12 @@ def get_points(url, EVENT, EVENT_MULTIPLIER, MINIMUM_PENALTY, ENDPOINT,
         if racer[2] == -1:
             score = -1
         else:
-            score = penalty + get_race_points(winner_time, racer[2], EVENT_MULTIPLIER)
+            score = penalty + get_race_points(winner_time, racer[2], race.event_multiplier)
         score = round(score, 2)
         calculated_points.append([racer[0], racer[1], score])
     
     return calculated_points
 
-    
     # Penalty Calculation: (A+B-C)/10
     # B is top 5 points at start
     # A is top 5 points out of top 10
@@ -263,24 +272,37 @@ def get_points(url, EVENT, EVENT_MULTIPLIER, MINIMUM_PENALTY, ENDPOINT,
         # Giant Slalom: F = 1010
         # Super-G: F = 1190
         # Alpine Combined: F = 1360
+    
+    # Penalty Edge cases:
+    # two or more competitors ranked 10th:
+        # all can be considered as top 10 for calculation
+    # two or more competitors in top 10 have 5th best points:
+        # person with higher race points used for penalty calculation
 
 
 def handler(event, context):
-    URL = "https://www.live-timing.com/race2.php?r=253691"
-    EVENT = "SLpoints"
-    EVENT_MULTIPLIER = 730
-    MINIMUM_PENALTY = 23
+    # TODO: implement race class with competitors - finished, not found in database
+            # race should have hashmap mapping fiscode -> racer for uniqueness
+                # implement competitor class w/:
+                # firstname, lastname, fisPoints, raceTime, score
 
-    # configuration values
-    ENDPOINT = "fis-points-database.cby1setpagel.us-east-2.rds.amazonaws.com"
-    USERNAME = "admin"
-    PASSWORD = "password"
-    DATABASE_NAME = "fis_points"
+    # TODO: get URL, EVENT, MINIMUM_PENALTY from user
+    # figure out EVENT_MULTIPLIER based on EVENT
+    # hard-coded these for now inside get_points function
+
+    # TODO: store not-found racers separately for displaying 
+    
+    url = event["queryStringParameters"]["url"]
+    min_penalty = event["queryStringParameters"]["min-penalty"]
+    race_event = event["queryStringParameters"]["event"]
+    race = Race(url, min_penalty, race_event)
+    #URL = "https://www.live-timing.com/race2.php?r=253691"
+    #MIN_PENALTY = "23"
+    #EVENT = "SLpoints"
+    #race = Race(URL, MIN_PENALTY, EVENT)
+    points = get_points(race)
 
     try:
-        url = event["queryStringParameters"]["url"]
-        points = get_points(url, EVENT, EVENT_MULTIPLIER, MINIMUM_PENALTY, ENDPOINT,
-                            USERNAME, PASSWORD, DATABASE_NAME)
         return {
             "statusCode": 200,
             "body": json.dumps(points)
