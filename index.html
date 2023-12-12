@@ -8,7 +8,21 @@
 </head>
 <body>
   <form id="userInfo">
-    <input type="text" name="liveUrl" id="urlInput">
+    <input type="text" name="url" id="urlInput">
+    <select name="minPenalty" id="minPenalty">
+      <option value="null">-- type of competition --</option>
+      <option value="23">Open FIS</option>
+      <option value="20">National Championship</option>
+      <option value="15">Noram/Europa Cup</option>
+      <option value="0">World Cup</option>
+    </select>
+    <select name="event" id ="eventSelector">
+      <option value="null">-- select an event --</option>
+      <option value="SLpoints">SL</option>
+      <option value="GSpoints">GS</option>
+      <option value="SGpoints">SG</option>
+      <option value="DHpoints">DH</option>
+    </select>
     <input type="submit" value="Submit">
   </form>
   <h4 id="response"></h4>
