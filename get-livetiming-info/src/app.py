@@ -18,33 +18,8 @@ import json
 # NOTE: get URL, EVENT, MINIMUM_PENALTY from user
 # figure out EVENT_MULTIPLIER based on EVENT
 # hard-coded these for now
-URL = "https://www.live-timing.com/race2.php?r=253691"
-EVENT = "SLpoints"
-EVENT_MULTIPLIER = 730
-MINIMUM_PENALTY = 23
 
-# configuration values
-ENDPOINT = "fis-points-database.cby1setpagel.us-east-2.rds.amazonaws.com"
-USERNAME = "admin"
-PASSWORD = "password"
-DATABASE_NAME = "fis_points"
 
-# set up logger
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
-
-# create the database connection outside of the handler to allow connections to be
-# re-used by subsequent function invocations.
-try:
-        connection = pymysql.connect(host=ENDPOINT, user=USERNAME, passwd=PASSWORD,
-							         db=DATABASE_NAME, connect_timeout=5,
-									 cursorclass=pymysql.cursors.DictCursor)
-except pymysql.MySQLError as e:
-    logger.error("ERROR: Unexpected error: Could not connect to MySQL instance.")
-    logger.error(e)
-    sys.exit()
-
-logger.info("SUCCESS: Connection to RDS for MySQL instance succeeded")
 
 def get_df_from_database(cursor):
     # get df of full RDS database
@@ -113,7 +88,7 @@ def get_times_and_full_names(driver):
             times.append(time)
     return times, full_names
 
-def add_points_to_racer_info(existing_df, racer_info):
+def add_points_to_racer_info(existing_df, racer_info, EVENT):
     # get all points, for sorting later in part A calculation
     all_points = []
 
@@ -148,7 +123,7 @@ def add_points_to_racer_info(existing_df, racer_info):
             all_points.append(points)
     return racer_info, all_points
 
-def get_A_and_C(racer_info):
+def get_A_and_C(racer_info, EVENT_MULTIPLIER):
     # Get A - top 5 points out of top 10 finishers
     top_ten_finishers = racer_info[:10]
 
@@ -170,7 +145,7 @@ def get_A_and_C(racer_info):
     C = 0
     winner_time = racer_info[0][2]
     for finisher in top_ten_finishers[:5]:
-        C += get_race_points(winner_time, finisher[2])
+        C += get_race_points(winner_time, finisher[2], EVENT_MULTIPLIER)
 
     return A, C
 
@@ -179,7 +154,7 @@ def get_B(all_points):
     all_points.sort()
     return sum(all_points[:5])
 
-def get_race_points(winner_time, finisher_time):
+def get_race_points(winner_time, finisher_time, EVENT_MULTIPLIER):
     return ((finisher_time/winner_time) - 1) * EVENT_MULTIPLIER
 
 def get_driver():
@@ -202,9 +177,27 @@ def get_driver():
     driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
     return driver, chrome_service
 
-def get_points():
+def get_points(url, EVENT, EVENT_MULTIPLIER, MINIMUM_PENALTY, ENDPOINT,
+                            USERNAME, PASSWORD, DATABASE_NAME):
+    # set up logger
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+
+    try:
+            connection = pymysql.connect(host=ENDPOINT, user=USERNAME, passwd=PASSWORD,
+                                        db=DATABASE_NAME, connect_timeout=5,
+                                        cursorclass=pymysql.cursors.DictCursor)
+    # make database connection
+    except pymysql.MySQLError as e:
+        logger.error("ERROR: Unexpected error: Could not connect to MySQL instance.")
+        logger.error(e)
+        sys.exit()
+
+    logger.info("SUCCESS: Connection to RDS for MySQL instance succeeded")
+
+    # set up selenium driver
     driver, chrome_service = get_driver()
-    driver.get(URL)
+    driver.get(url)
     driver.implicitly_wait(10)
 
     # list of times, with -1 corresponding to no time
@@ -230,14 +223,14 @@ def get_points():
     
     # racer_info of format [[last_name, first_name, time, points]]
     # NOTE: points == -1 if racer not found in database
-    racer_info, all_points = add_points_to_racer_info(existing_df, racer_info)
+    racer_info, all_points = add_points_to_racer_info(existing_df, racer_info, EVENT)
 
     # re-make all_points list to reflect adding 999.99 to calculation
     all_points = []
     for racer in racer_info:
         all_points.append(racer[-1])
 
-    A, C = get_A_and_C(racer_info)
+    A, C = get_A_and_C(racer_info, EVENT_MULTIPLIER)
     B = get_B(all_points)
     penalty = max((A+B-C)/10, MINIMUM_PENALTY)
 
@@ -249,7 +242,7 @@ def get_points():
         if racer[2] == -1:
             score = -1
         else:
-            score = penalty + get_race_points(winner_time, racer[2])
+            score = penalty + get_race_points(winner_time, racer[2], EVENT_MULTIPLIER)
         score = round(score, 2)
         calculated_points.append([racer[0], racer[1], score])
     
@@ -273,12 +266,26 @@ def get_points():
 
 
 def handler(event, context):
+    URL = "https://www.live-timing.com/race2.php?r=253691"
+    EVENT = "SLpoints"
+    EVENT_MULTIPLIER = 730
+    MINIMUM_PENALTY = 23
+
+    # configuration values
+    ENDPOINT = "fis-points-database.cby1setpagel.us-east-2.rds.amazonaws.com"
+    USERNAME = "admin"
+    PASSWORD = "password"
+    DATABASE_NAME = "fis_points"
+
     try:
-        points = get_points()
+        url = event["queryStringParameters"]["url"]
+        points = get_points(url, EVENT, EVENT_MULTIPLIER, MINIMUM_PENALTY, ENDPOINT,
+                            USERNAME, PASSWORD, DATABASE_NAME)
         return {
             "statusCode": 200,
             "body": json.dumps(points)
         }
+
     except Exception as e:
         return {
             "statusCode": 500,
