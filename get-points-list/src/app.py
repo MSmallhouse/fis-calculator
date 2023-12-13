@@ -91,8 +91,10 @@ def update_database(logger, connection, download_url):
 			
 			# update or insert necessary rows
 			insert_update(updated_rows, cursor)
-		# connection not autocommitted by default
-		connection.commit()
+
+			# connection not autocommitted by default
+			connection.commit()
+			cursor.close()
 
 def insert_update(df, cursor):
 	for index, row in df.iterrows():
