@@ -1,20 +1,34 @@
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
 import sys
-import re
 import logging
 import pymysql
 import pymysql.cursors
 import pandas as pd
 import json
 
+# imports from user-defined modules
+from utils import get_driver
+from utils import clean_name
+from utils import time_to_float
+from utils import get_df_from_database
+
+class Competitor:
+    def __init__(self, full_name):
+        self.full_name = full_name
+        self.first_name = ""
+        self.last_name = ""
+        self.time = -1
+        self.fis_points = 1000
+        self.score = -1
+
+    def __str__(self):
+        return f"{self.full_name} score: {self.score}"
+
 class Race:
     def __init__(self, url, min_penalty, event):
+        # race information variables
         self.url = url
         self.min_penalty = int(min_penalty)
-
         self.event = event
         if event == "SLpoints":
             self.event_multiplier = 730
@@ -25,75 +39,151 @@ class Race:
         if event == "DHpoints":
             self.event_multiplier = 1250
         
+        # variabes for calculating penalty
         self.competitors = []
         self.starting_racers_points = []
         self.winning_time = 0
         self.penalty = 0
 
-class Competitor:
-    def __init__(self, full_name):
-        self.full_name = full_name
-        self.first_name = "abc"
-        self.last_name = ""
-        self.time = -1
-        self.fis_points = 999.99
-        self.score = -1
+        # database configuration values
+        self.ENDPOINT = "fis-points-database.cby1setpagel.us-east-2.rds.amazonaws.com"
+        self.USERNAME = "admin"
+        self.PASSWORD = "password"
+        self.DATABASE_NAME = "fis_points"
 
-    def __str__(self):
-        return f"{self.full_name} score: {self.score}"
+    def get_points(self):
+        self.connect_to_database()
+        self.scrape_times_and_names()
+        self.split_names()
 
-def get_points(race):
-    # database configuration values
-    ENDPOINT = "fis-points-database.cby1setpagel.us-east-2.rds.amazonaws.com"
-    USERNAME = "admin"
-    PASSWORD = "password"
-    DATABASE_NAME = "fis_points"
+        self.points_list_df = get_df_from_database(self.connection)
+        self.add_points_to_competitors()
+        self.starting_racers_points = [competitor.fis_points for competitor in self.competitors]
 
-    # set up logger
-    logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
+        self.calculate_penalty()
 
-    # make database connection
-    try:
-        connection = pymysql.connect(host=ENDPOINT, user=USERNAME, passwd=PASSWORD,
-                                    db=DATABASE_NAME, connect_timeout=5,
-                                    cursorclass=pymysql.cursors.DictCursor)
-    except pymysql.MySQLError as e:
-        logger.error("ERROR: Unexpected error: Could not connect to MySQL instance.")
-        logger.error(e)
-        sys.exit()
-    logger.info("SUCCESS: Connection to RDS for MySQL instance succeeded")
 
-    # set up selenium driver
-    driver, chrome_service = get_driver()
-    driver.get(race.url)
-    driver.implicitly_wait(10)
-
-    scrape_times_and_names(driver, race)
-
-    # Close webdriver and chrome service
-    driver.quit()
-    chrome_service.stop()
-
-    split_full_name_to_first_last(race)
-
-    points_list_df = get_df_from_database(connection)
-    add_points_to_competitors(points_list_df, race)
-    race.starting_racers_points = [competitor.fis_points for competitor in race.competitors]
-
-    A, C = get_A_and_C(race)
-    B = get_B(race)
-    penalty = max((A+B-C)/10, race.min_penalty)
-    race.penalty = round(penalty, 2)
-
-    for competitor in race.competitors:
-        # competitor didn't finish or didn't start
-        if competitor.time == -1:
-            competitor.score = -1
-            continue
-        competitor.score = round(get_race_points(competitor, race) + race.penalty, 2)
+        for competitor in self.competitors:
+            # competitor didn't finish or didn't start
+            if competitor.time == -1:
+                competitor.score = -1
+                continue
+            competitor.score = round(get_race_points(competitor, self) + self.penalty, 2)
+        
+        return
     
-    return
+    def connect_to_database(self):
+        self.logger = logging.getLogger()
+        self.logger.setLevel(logging.INFO)
+
+        # make database connection
+        try:
+            self.connection = pymysql.connect(host=self.ENDPOINT, user=self.USERNAME,
+                                         passwd=self.PASSWORD,db=self.DATABASE_NAME,
+                                         connect_timeout=5,
+                                         cursorclass=pymysql.cursors.DictCursor)
+        except pymysql.MySQLError as e:
+            self.logger.error("ERROR: Unexpected error: Could not connect to MySQL instance.")
+            self.logger.error(e)
+            sys.exit()
+        self.logger.info("SUCCESS: Connection to RDS for MySQL instance succeeded")
+
+    def scrape_times_and_names(self):
+        # set up selenium driver
+        driver, chrome_service = get_driver()
+        driver.get(self.url)
+        driver.implicitly_wait(10)
+
+        result_table = driver.find_element(By.ID, "resultTable")
+        result_rows = result_table.find_elements(By.CLASS_NAME, "table")
+        for result in result_rows:
+            result_entry = result.find_elements(By.XPATH, ".//td")
+
+            # disreguards row with an ad that shows up on webpage
+            if len(result_entry) < 3:
+                continue
+
+            # if someone didn't start the first run they can't
+            # be considered in the race penalty calclation per fis rules
+            if "DNS" in result_entry[-3].text:
+                continue
+
+            full_name = result_entry[2].text
+            competitor = Competitor(full_name)
+            competitor.time = time_to_float(result_entry[-1].text)
+            self.competitors.append(competitor)
+
+        self.winning_time = self.competitors[0].time
+
+        # Close webdriver and chrome service
+        driver.quit()
+        chrome_service.stop()
+        return
+
+    def split_names(self):
+        for competitor in self.competitors:
+            name_segments = clean_name(competitor.full_name)
+            competitor.last_name = name_segments[0]
+            competitor.first_name = name_segments[1]
+
+    def add_points_to_competitors(self):
+        # lowercase for accurate matching
+        existing_df = self.points_list_df
+        existing_df["Firstname"] = existing_df["Firstname"].str.lower()
+        existing_df["Lastname"] = existing_df["Lastname"].str.lower()
+
+        for competitor in self.competitors:
+            mask = ((existing_df["Lastname"] == competitor.last_name) &
+                    (existing_df["Firstname"] == competitor.first_name))
+            matching_row = existing_df[mask]
+
+            if matching_row.empty:
+                print(f"ERROR: Racer {competitor.first_name}, {competitor.last_name}'s points not found in database")
+                continue
+
+            points = matching_row.iloc[0][self.event]
+            if points == -1:
+                # assume racer has no points
+                # TODO: could check to be sure that racer actually has no points, and check 
+                        # that this works properly
+                competitor.fis_points = 999.99
+            else:
+                competitor.fis_points = points
+        return
+
+    def calculate_penalty(self):
+        A, C = self.get_A_and_C()
+        B = self.get_B()
+        penalty = max((A+B-C)/10, self.min_penalty)
+        self.penalty = round(penalty, 2)
+
+    def get_A_and_C(self):
+        top_ten_finishers = self.competitors[:10]
+
+        # EDGE CASE: tie for 10th
+        # consider all ties to have finished in the top 10 per fis rules
+        i = 10
+        while self.competitors[i].time == self.competitors[9].time:
+            top_ten_finishers.append(self.competitors[i])
+            i += 1
+        
+        top_ten_sorted = sorted(top_ten_finishers, key=point_sort)
+
+        # A = top 5 points out of top 10 finishers
+        A = 0
+        for competitor in top_ten_sorted[:5]:
+            A += competitor.fis_points
+
+        # C = race points of top 5 ranked racers inside top 10 finishers
+        C = 0
+        for competitor in top_ten_sorted[:5]:
+            C += get_race_points(competitor, self)
+        return A, C
+
+    def get_B(self):
+        # B = top 5 points at start
+        self.starting_racers_points.sort()
+        return sum(self.starting_racers_points[:5])
 
     # Penalty Calculation: (A+B-C)/10
     # B is top 5 points at start
@@ -116,161 +206,13 @@ def get_points(race):
     # two or more competitors in top 10 have 5th best points:
         # person with higher race points used for penalty calculation
 
-def scrape_times_and_names(driver, race):
-    result_table = driver.find_element(By.ID, "resultTable")
-    result_rows = result_table.find_elements(By.CLASS_NAME, "table")
-    for result in result_rows:
-        result_entry = result.find_elements(By.XPATH, ".//td")
-
-        # only get result elements rendered with all fields
-        if len(result_entry) < 3:
-            continue
-
-        # if someone didn't start the first run they can't
-        # be considered in the race penalty calclation per fis rules
-        if "DNS" in result_entry[-3].text:
-            continue
-
-        full_name = result_entry[2].text
-        competitor = Competitor(full_name)
-        competitor.time = time_to_float(result_entry[-1].text)
-        race.competitors.append(competitor)
-
-    race.winning_time = race.competitors[0].time
-    return
-
-def time_to_float(time):
-    # reg ex to remove place ex: (1) and whitespace from time
-    time = re.sub(r'\s*\(\d+\)$', '', time.strip())
-
-    # calculate time in seconds, but only for those who finished
-    if not time or time == "DNF" or time == "DNS":
-        return -1
-    # edge case for times under a minute
-    elif ":" not in time:
-        time = float(time)
-    else:
-        minutes = time.split(":")[0]
-        seconds = time.split(":")[1]
-        time = float(minutes)*60 + float(seconds)
-    return time
-
-
-def split_full_name_to_first_last(race):
-    for competitor in race.competitors:
-        name_segments = clean_name(competitor.full_name)
-        competitor.last_name = name_segments[0]
-        competitor.first_name = name_segments[1]
-
-def clean_name(name):
-    # prevents from breaking if name has no comma for some reason
-    if "," not in name:
-        print(f"ERROR: {name} could not be parsed correctly")
-        return ["", ""]
-
-    name = name.lower()
-    name = name.split(",")
-    if len(name) >= 2:
-        #TODO: use strip here instead?
-        # remove leading whitespace from first names, left over from splitting
-        name[1] = name[1][1:-1]
-    return name
-
-def get_df_from_database(connection):
-    with connection:
-        with connection.cursor() as cursor:
-            # get df of full RDS database
-            query = "SELECT * FROM fis_points.point_entries"
-            cursor.execute(query)
-            existing_data = cursor.fetchall()
-
-            column_names = ["Fiscode", "Lastname", "Firstname", "Competitorname", "DHpoints",
-                            "SLpoints", "GSpoints", "SGpoints", "ACpoints"]
-
-            # connection not autocommitted by default
-            connection.commit()
-            cursor.close()
-    return pd.DataFrame(existing_data, columns=column_names)
-
-def add_points_to_competitors(existing_df, race):
-    # lowercase for accurate matching
-    existing_df["Firstname"] = existing_df["Firstname"].str.lower()
-    existing_df["Lastname"] = existing_df["Lastname"].str.lower()
-
-    for competitor in race.competitors:
-        mask = ((existing_df["Lastname"] == competitor.last_name) &
-                (existing_df["Firstname"] == competitor.first_name))
-        matching_row = existing_df[mask]
-
-        if matching_row.empty:
-            print(f"ERROR: Racer {competitor.first_name}, {competitor.last_name}'s points not found in database")
-            continue
-
-        points = matching_row.iloc[0][race.event]
-        if points == -1:
-            # assume racer has no points
-            # TODO: could check to be sure that racer actually has no points, and check 
-                    # that this works properly
-            competitor.fis_points = 999.99
-        else:
-            competitor.fis_points = points
-    return
-
-def get_A_and_C(race):
-    top_ten_finishers = race.competitors[:10]
-
-    # EDGE CASE: tie for 10th
-    # consider all ties to have finished in the top 10 per fis rules
-    i = 10
-    while race.competitors[i].time == race.competitors[9].time:
-        top_ten_finishers.append(race.competitors[i])
-        i += 1
-    
-    top_ten_sorted = sorted(top_ten_finishers, key=point_sort)
-
-    # A = top 5 points out of top 10 finishers
-    A = 0
-    for competitor in top_ten_sorted[:5]:
-        A += competitor.fis_points
-
-    # C = race points of top 5 ranked racers inside top 10 finishers
-    C = 0
-    for competitor in top_ten_sorted[:5]:
-        C += get_race_points(competitor, race)
-    return A, C
-
 # sorting key - on case of tie for points, put the slower racer first per fis rules
 def point_sort(competitor):
     return (competitor.fis_points, -competitor.time) # negative competitor.time to sort descending
-
 def get_race_points(competitor, race):
     race_points = ((competitor.time/race.winning_time) - 1) * race.event_multiplier
     return round(race_points, 2)
 
-def get_B(race):
-    # B = top 5 points at start
-    race.starting_racers_points.sort()
-    return sum(race.starting_racers_points[:5])
-
-def get_driver():
-    chrome_options = webdriver.ChromeOptions()
-    chrome_options.binary_location = "/opt/chrome/chrome"
-    chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--disable-dev-tools")
-    chrome_options.add_argument("--no-zygote")
-    chrome_options.add_argument("--single-process")
-    chrome_options.add_argument("window-size=2560x1440")
-    chrome_options.add_argument("--user-data-dir=/tmp/chrome-user-data")
-    chrome_options.add_argument("--remote-debugging-port=9222")
-    #chrome_options.add_argument("--data-path=/tmp/chrome-user-data")
-    #chrome_options.add_argument("--disk-cache-dir=/tmp/chrome-user-data")
-
-    chrome_service = Service(executable_path=r'/opt/chromedriver')
-    driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
-    return driver, chrome_service
 
 def handler(event, context):
     # TODO: build 2 more webscrapers - one for vola live timing and one for fis
@@ -284,18 +226,29 @@ def handler(event, context):
     #min_penalty = event["queryStringParameters"]["min-penalty"]
     #race_event = event["queryStringParameters"]["event"]
     #race = Race(url, min_penalty, race_event)
-    URL = "https://www.live-timing.com/race2.php?r=253656"
-    MIN_PENALTY = "15"
-    EVENT = "SGpoints"
+    URL = "https://www.live-timing.com/race2.php?r=253738"
+    MIN_PENALTY = "23"
+    EVENT = "GSpoints"
     race = Race(URL, MIN_PENALTY, EVENT)
 
-    get_points(race)
+    race.get_points()
+    not_finished = []
+    finishers = []
     for competitor in race.competitors:
-        print(competitor)
+        # points = 1000 indicates not found in database
+        if competitor.fis_points == 1000:
+            not_finished.append(f"{competitor.full_name}: points not found in database, calculations might not be accurate")
+        # score = -1 indicates did not finish or did not start
+        if competitor.score != -1:
+            finishers.append(competitor)
+
+    output = [(f"{competitor.full_name}: {competitor.score}") for competitor in finishers]
+    for racer in not_finished:
+        output.insert(0, racer)
     try:
         return {
             "statusCode": 200,
-            "body": json.dumps(race.competitors)
+            "body": json.dumps(output)
         }
 
     except Exception as e:
