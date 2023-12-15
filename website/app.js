@@ -15,12 +15,15 @@ form.onsubmit = e => {
                         &min-penalty=${minPenalty.value}
                         &event=${eventSelector.value}`
 
-    let points = fetch(requestURL)
-
-    points.then(response => response.json())
+    fetch(requestURL).then(response => response.json())
         .then(data => {
-            // handle response from Lambda function
             console.log(data);
+            // handle response from Lambda function
+            data.forEach(element => {
+                const header = document.createElement("h4");
+                header.textContent = element;
+                document.body.append(header);
+            });
         })
         .catch(error => {
             console.log("Error: ", error);
