@@ -83,6 +83,7 @@ class Race:
         return
 
     def get_A_and_C(self):
+        self.competitors = sorted(self.competitors, key=time_sort)
         top_ten_finishers = self.competitors[:10]
 
         # EDGE CASE: tie for 10th
@@ -91,18 +92,18 @@ class Race:
         while self.competitors[i].time == self.competitors[9].time:
             top_ten_finishers.append(self.competitors[i])
             i += 1
-        
-        top_ten_sorted = sorted(top_ten_finishers, key=point_sort)
+
+        top_ten_sorted_by_points = sorted(top_ten_finishers, key=point_sort)
 
         # A = top 5 points out of top 10 finishers
-        A = 0
-        for competitor in top_ten_sorted[:5]:
-            A += competitor.fis_points
-
         # C = race points of top 5 ranked racers inside top 10 finishers
+        A = 0
         C = 0
-        for competitor in top_ten_sorted[:5]:
+        for competitor in top_ten_sorted_by_points[:5]:
+            A += competitor.fis_points
             C += get_race_points(competitor, self)
+
+
         return A, C
 
     def get_B(self, starting_racers_points):
@@ -113,11 +114,14 @@ class Race:
     def assign_scores(self):
         for competitor in self.competitors:
             # competitor didn't finish or didn't start
-            if competitor.time == -1:
+            if competitor.time == 9999:
                 competitor.score = -1
                 continue
             competitor.score = round(get_race_points(competitor, self) + self.penalty, 2)
         return
+
+def time_sort(competitor):
+    return competitor.time
 
 # sorting key - on case of tie for points, put the slower racer first per fis rules
 def point_sort(competitor):
@@ -135,14 +139,14 @@ def handler(event, context):
 
     # TODO: store not-found racers separately for displaying 
     
-    #url = event["queryStringParameters"]["url"]
-    #min_penalty = event["queryStringParameters"]["min-penalty"]
-    #race_event = event["queryStringParameters"]["event"]
-    #race = Race(url, min_penalty, race_event)
-    URL = "https://www.live-timing.com/race2.php?r=253738"
-    MIN_PENALTY = "23"
-    EVENT = "GSpoints"
-    race = Race(URL, MIN_PENALTY, EVENT)
+    url = event["queryStringParameters"]["url"]
+    min_penalty = event["queryStringParameters"]["min-penalty"]
+    race_event = event["queryStringParameters"]["event"]
+    race = Race(url, min_penalty, race_event)
+    #URL = "https://www.live-timing.com/race2.php?r=253768"
+    #MIN_PENALTY = "23"
+    #EVENT = "SLpoints"
+    #race = Race(URL, MIN_PENALTY, EVENT)
 
     race.get_points()
     not_finished = []
@@ -159,6 +163,7 @@ def handler(event, context):
     output = [(f"{competitor.full_name}: {competitor.score}") for competitor in finishers]
     for racer in not_finished:
         output.insert(0, racer)
+    
     try:
         return {
             "statusCode": 200,
