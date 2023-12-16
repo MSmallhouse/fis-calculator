@@ -82,7 +82,7 @@ def time_to_float(time):
 
     # calculate time in seconds, but only for those who finished
     if not time or time == "DNF" or time == "DNS":
-        return -1
+        return 9999
     # edge case for times under a minute
     elif ":" not in time:
         time = float(time)
@@ -120,6 +120,8 @@ def livetiming_scraper(race):
     def is_valid_field(field):
         return (field.startswith("m=") or
                 field.startswith("fp=") or
+                field.startswith("r1") or
+                field.startswith("r2") or
                 field.startswith("tt="))
 
     r = requests.get(URL)
@@ -138,25 +140,26 @@ def livetiming_scraper(race):
     split_racers.append(temp)
     split_racers = split_racers[1:]
 
-    finishers = []
+    starters = []
     for racer in split_racers:
-        # only consider racers with tt (total time)
-        if "tt=" not in racer[-1]:
+        # only consider racers who started the first run
+        if "DNS" in racer[2]:
             continue
-        # don't consider racers who didn't finish, didn't start or got disqualified
-        if "DNF" in racer[-1]:
-            continue
-        if "DNS" in racer[-1]:
-            continue
-        if "DQ" in racer[-1]:
-            continue
-        finishers.append(racer)
+        starters.append(racer)
     
-    for finisher in finishers:
+    for starter in starters:
         # strip off "m= from name"
-        full_name = finisher[0][2:]
+        full_name = starter[0][2:]
         competitor = Competitor(full_name)
-        competitor.time = time_to_float(finisher[-1][3:])
+
+        # filter for did not finish, did not start, or disqualified
+        if ("tt=" not in starter[-1] or
+            "DNF" in "".join(starter) or
+            "DNS" in "".join(starter) or
+            "DQ" in "".join(starter)):
+            competitor.time = 9999
+        else:
+            competitor.time = time_to_float(starter[-1][3:])
         race.competitors.append(competitor)
         race.winning_time = min(race.winning_time, competitor.time)
     return
