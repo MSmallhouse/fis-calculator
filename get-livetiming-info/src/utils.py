@@ -117,17 +117,28 @@ def scrape_results(race):
 def livetiming_scraper(race):
     URL = "https://www.live-timing.com/includes/aj_race." + race.url.split(".")[-1]
     # only get first names, run time
-    def is_valid_field(field):
+    # get both runs for tech races
+    def is_valid_field_tech_race(field):
         return (field.startswith("m=") or
                 field.startswith("fp=") or
                 field.startswith("r1") or
                 field.startswith("r2") or
                 field.startswith("tt="))
 
+    # speed races only have 1 run
+    def is_valid_field_speed_race(field):
+        return (field.startswith("m=") or
+                field.startswith("fp=") or
+                field.startswith("r1") or
+                field.startswith("tt="))
+
     r = requests.get(URL)
     content = r.text
 
-    filtered_competitors = [field.strip() for field in content.split("|") if is_valid_field(field)]
+    if race.event == "SLpoints" or race.event=="GSpoints":
+        filtered_competitors = [field.strip() for field in content.split("|") if is_valid_field_tech_race(field)]
+    if race.event == "SGpoints" or race.event == "DHpoints":
+        filtered_competitors = [field.strip() for field in content.split("|") if is_valid_field_speed_race(field)]
 
     # split into 2d list of racers
     split_racers = []
@@ -160,6 +171,7 @@ def livetiming_scraper(race):
             competitor.time = 9999
         else:
             competitor.time = time_to_float(starter[-1][3:])
+        competitor.fis_points = int(starter[1][3:])/100
         race.competitors.append(competitor)
         race.winning_time = min(race.winning_time, competitor.time)
     return
