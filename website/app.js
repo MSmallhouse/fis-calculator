@@ -19,11 +19,12 @@ form.onsubmit = e => {
         .then(data => {
             console.log(data);
             // handle response from Lambda function
-            data.forEach(element => {
+            for (let i=0; i<data.length; i++) {
                 const header = document.createElement("h4");
-                header.textContent = element;
+                header.textContent = `${i+1}. ${data[i]}`;
                 document.body.append(header);
-            });
+
+            }
         })
         .catch(error => {
             console.log("Error: ", error);
