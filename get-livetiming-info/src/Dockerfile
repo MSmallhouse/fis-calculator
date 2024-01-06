@@ -30,5 +30,6 @@ COPY --from=stage /opt/chrome /opt/chrome
 COPY --from=stage /opt/chromedriver /opt/chromedriver
 COPY app.py ${LAMBDA_TASK_ROOT}
 COPY utils.py ${LAMBDA_TASK_ROOT}
+copy scrapers.py ${LAMBDA_TASK_ROOT}
 
 CMD [ "app.handler" ]
