@@ -45,7 +45,6 @@ def vola_scraper(race):
         payload = {
             'command': command,
             'race_idx': race_id,
-            ###TODO FOR SPEED, GET RUN 1???
             'runno': run_number,
         }
 
@@ -163,7 +162,6 @@ def vola_scraper(race):
             if full_name in racers:
                 continue
 
-
             competitor = Competitor(full_name)
             race.competitors.append(competitor)
             racers.add(full_name)
@@ -175,6 +173,10 @@ def vola_scraper(race):
         else:
             names_and_times = extract_names_and_times("2")
         
+        competitor_ids = {} 
+        for i in range(len(race.competitors)):
+            competitor_ids[race.competitors[i].full_name] = i
+
         for i in range(len(names_and_times)-1):
             # needs to have field be a name, and following field be a time
             if not is_time_field(names_and_times[i+1]['value']):
@@ -183,11 +185,16 @@ def vola_scraper(race):
                 continue
 
             full_name = add_comma_to_full_name(names_and_times[i]['value'])
-            for competitor in race.competitors:
-                if competitor.full_name == full_name:
-                    competitor.time = time_to_float(names_and_times[i+1]['value'])
-                    race.winning_time = min(race.winning_time, competitor.time)
-                    break
+            if full_name in competitor_ids:
+                id = competitor_ids[full_name]
+                race.competitors[id].time = time_to_float(names_and_times[i+1]['value'])
+                race.winning_time = min(race.winning_time, race.competitors[id].time)
+
+            #for competitor in race.competitors:
+            #    if competitor.full_name == full_name:
+            #        competitor.time = time_to_float(names_and_times[i+1]['value'])
+            #        race.winning_time = min(race.winning_time, competitor.time)
+            #        break
     
     initialize_starting_racers()
     add_times_to_racers()
