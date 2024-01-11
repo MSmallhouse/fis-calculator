@@ -36,44 +36,12 @@ class Race:
     def get_points(self):
         connect_to_database(self)
         scrape_results(self)
-        self.split_names()
-
-        points_df = get_df_from_database(self.connection)
-        self.add_points_to_competitors(points_df)
 
         starting_racers_points = [competitor.fis_points for competitor in self.competitors]
         self.calculate_penalty(starting_racers_points)
         self.assign_scores()
         return
     
-    def split_names(self):
-        for competitor in self.competitors:
-            name_segments = clean_name(competitor.full_name)
-            competitor.last_name = name_segments[0]
-            competitor.first_name = name_segments[1]
-        return
-
-    def add_points_to_competitors(self, points_df):
-        # lowercase for accurate matching
-        points_df["Firstname"] = points_df["Firstname"].str.lower()
-        points_df["Lastname"] = points_df["Lastname"].str.lower()
-
-        for competitor in self.competitors:
-            mask = ((points_df["Lastname"] == competitor.last_name) &
-                    (points_df["Firstname"] == competitor.first_name))
-            matching_row = points_df[mask]
-
-            if matching_row.empty:
-                print(f"ERROR: Racer {competitor.first_name}, {competitor.last_name}'s points not found in database")
-                continue
-
-            points = matching_row.iloc[0][self.event]
-            if points == -1:
-                # racer has not scored any points yet, assign them highest value
-                competitor.fis_points = 999.99
-            else:
-                competitor.fis_points = points
-        return
 
     def calculate_penalty(self, starting_racers_points):
         A, C = self.get_A_and_C()
@@ -88,10 +56,11 @@ class Race:
 
         # EDGE CASE: tie for 10th
         # consider all ties to have finished in the top 10 per fis rules
-        i = 10
-        while self.competitors[i].time == self.competitors[9].time:
-            top_ten_finishers.append(self.competitors[i])
-            i += 1
+        if len(self.competitors) >= 10:
+            i = 10
+            while self.competitors[i].time == self.competitors[9].time:
+                top_ten_finishers.append(self.competitors[i])
+                i += 1
 
         top_ten_sorted_by_points = sorted(top_ten_finishers, key=point_sort)
 
@@ -102,8 +71,6 @@ class Race:
         for competitor in top_ten_sorted_by_points[:5]:
             A += competitor.fis_points
             C += get_race_points(competitor, self)
-
-
         return A, C
 
     def get_B(self, starting_racers_points):
@@ -139,14 +106,14 @@ def handler(event, context):
 
     # TODO: store not-found racers separately for displaying 
     
-    url = event["queryStringParameters"]["url"]
-    min_penalty = event["queryStringParameters"]["min-penalty"]
-    race_event = event["queryStringParameters"]["event"]
-    race = Race(url, min_penalty, race_event)
-    #URL = "https://www.live-timing.com/race2.php?r=253768"
-    #MIN_PENALTY = "23"
-    #EVENT = "SLpoints"
-    #race = Race(URL, MIN_PENALTY, EVENT)
+    #url = event["queryStringParameters"]["url"]
+    #min_penalty = event["queryStringParameters"]["min-penalty"]
+    #race_event = event["queryStringParameters"]["event"]
+    #race = Race(url, min_penalty, race_event)
+    URL = "https://vola.ussalivetiming.com/race/usa-nh-gunstock-mountain-resort-lafoley-spring-series-at-gunstock_26842.html"
+    MIN_PENALTY = "15"
+    EVENT = "SLpoints"
+    race = Race(URL, MIN_PENALTY, EVENT)
 
     race.get_points()
     not_finished = []
@@ -155,7 +122,7 @@ def handler(event, context):
         # points = 1000 indicates not found in database
         #
         if competitor.fis_points == 1000:
-            not_finished.append(f"{competitor.full_name}: points not found in database, calculations might not be accurate")
+            not_finished.append(f"{competitor.full_name}: points not found, calculations might not be accurate")
         # score = -1 indicates did not finish or did not start
         if competitor.score != -1:
             finishers.append(competitor)
