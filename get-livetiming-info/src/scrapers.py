@@ -1,12 +1,14 @@
 import requests
 import re
 
+TIMES_AS_LETTERS = {"DNF", "DNS", "DSQ", "DQ", "Did Not Finish", "Did Not Start", "Disqualified"}
+
 class Competitor:
     def __init__(self, full_name):
         self.full_name = full_name
         self.first_name = ""
         self.last_name = ""
-        self.time = -1
+        self.time = 9999
         self.fis_points = 1000
         self.score = -1
 
@@ -49,21 +51,68 @@ def vola_scraper(race):
 
         return requests.post(url, headers=headers, data=payload)
 
-    def extract_names_and_times():
+    def is_time_field(value):
+        value = value.strip()
+        if value in TIMES_AS_LETTERS:
+            return True
+        return not any(c.isalpha() for c in value)
+
+    # some fields include just names, but no corresponding times in the following fields
+    def filter_fields_with_no_time(fields):
+        fields_with_times = []
+        continue_count = 0
+        for i in range(0, len(fields), 1):
+            # pretty awkard, but needed for conditional iteration since vola outputs data weirdly
+            if continue_count != 0:
+                continue_count -= 1
+                continue
+            if i+2 > len(fields)-1: # out of index
+                continue
+
+            if is_time_field(fields[i+2]['value']):
+                continue_count = 2
+                # append first name, last name, and time
+                fields_with_times.append(fields[i])
+                fields_with_times.append(fields[i+1])
+                fields_with_times.append(fields[i+2])
+
+        return fields_with_times
+
+    # combine to full name of form "LAST first"
+    def combine_first_last_name_fields(fields):
+        fields = filter_fields_with_no_time(fields)
+
+        transformed_fields = []
+        for i in range(0, len(fields), 3):
+            # NOTE: assumes last name is in all caps, while first name is lower-case
+            # if going by the FIS standard, this will be true
+            if fields[i]['value'].isupper():
+                fields[i]['value'] += " " + fields[i+1]['value']
+                transformed_fields.append(fields[i])
+            else:
+                fields[i+1]['value'] += " " + fields[i]['value']
+                transformed_fields.append(fields[i+1])
+            transformed_fields.append(fields[i+2])
+        
+        return transformed_fields
+
+    def extract_names_and_times(run_number):
+        # sometimes names are given as full names, sometimes they are given separated by first/last
+        first_last_names_separate = False
         valid_fields = set()
-        fields = send_request("GetHeatListFields", "1")
+        fields = send_request("GetHeatListFields", run_number)
         if fields.status_code == 200:
             # extract where names and times are stored
             data = fields.json()
             fields = data['DATA']['field']
             for field in fields:
-                if "Name" in field['title'] or "Time" in field['title']:
+                if "name" in field['title'].lower() or "time" in field['title'].lower():
                     valid_fields.add((field['grid'], field['col']))
+                if "first" in field['title'].lower() or "last" in field['title'].lower():
+                    first_last_names_separate = True
 
-        values = send_request("GetHeatListValues", "1")
+        values = send_request("GetHeatListValues", run_number)
 
-        #TODO: sometimes has Name, sometimes First Name and Last Name
-        #NOTE: for now, assume just name
         names_and_times = []
         if values.status_code == 200:
             # get names and times 
@@ -75,28 +124,77 @@ def vola_scraper(race):
                     continue
                 if (field['grid'], field['col']) in valid_fields:
                     names_and_times.append(field)
+
+            if first_last_names_separate:
+                names_and_times = combine_first_last_name_fields(names_and_times)
+
         return names_and_times
 
-    def initialize_starting_racers():
-        names_and_times = extract_names_and_times()
-        racers = set() # for duplicate detection
-        for i in range(0, len(names_and_times), 2):
-            # only consider racers who started at least the first run
-            full_name = names_and_times[i]['value']
-            if "DNS" in names_and_times[i+1]['value']:
+    def add_comma_to_full_name(name):
+        split_idx = 0
+        for i in range(len(name)): 
+            if not name[i].isalpha() or name[i] == " ": # skip characters like "-" and whitespace
                 continue
+            
+            # last name is in all caps, so find where transition from all caps to lowercase is
+            if i > 0 and not name[i].isupper() and name[i-1].isupper():
+                split_idx = i
+                break # only find first change from upper to lower
+            
+        # assume that first letter of first name is in all caps
+        split_idx -= 1
+        return name[:split_idx-1] + ", " + name[split_idx:]
+        
+
+    def initialize_starting_racers():
+        names_and_times = extract_names_and_times("1")
+
+        racers = set() # for duplicate detection
+        for i in range(len(names_and_times)):
+            if is_time_field(names_and_times[i]['value']):
+                continue
+
+            # only consider racers who started at least the first run
+            full_name = add_comma_to_full_name(names_and_times[i]['value'])
+            if i < len(names_and_times)-1 and (
+                "DNS" in names_and_times[i+1]['value'] or "Did Not Start" in names_and_times[i+1]['value']):
+                continue
+
             if full_name in racers:
                 continue
+
+
             competitor = Competitor(full_name)
             race.competitors.append(competitor)
             racers.add(full_name)
     
-    #TODO: get run 1 info to see who started race for penalty calculation
-    # if the race is not speed, get run 2 info for final calculations
+    def add_times_to_racers():
+        names_and_times = []
+        if race.event == "SGpoints" or race.event == "DHpoints":
+            names_and_times = extract_names_and_times("1")
+        else:
+            names_and_times = extract_names_and_times("2")
+        
+        for i in range(len(names_and_times)-1):
+            # needs to have field be a name, and following field be a time
+            if not is_time_field(names_and_times[i+1]['value']):
+                continue
+            if is_time_field(names_and_times[i]['value']):
+                continue
+
+            full_name = add_comma_to_full_name(names_and_times[i]['value'])
+            for competitor in race.competitors:
+                if competitor.full_name == full_name:
+                    competitor.time = time_to_float(names_and_times[i+1]['value'])
+                    race.winning_time = min(race.winning_time, competitor.time)
+                    break
+    
     initialize_starting_racers()
-    print(f"Number of starters: {len(race.competitors)}")
+    add_times_to_racers()
 
 def livetiming_scraper(race):
+    #TODO if not speed race, calculate total time by adding run 1 and run 2
+    # sometimes total time displays incorrectly
     URL = "https://www.live-timing.com/includes/aj_race." + race.url.split(".")[-1]
     # only get first names, run time
     # get both runs for tech races
@@ -136,7 +234,7 @@ def livetiming_scraper(race):
     starters = []
     for racer in split_racers:
         # only consider racers who started the first run
-        if "DNS" in racer[2]:
+        if "DNS" in racer[2] or "Did Not Start" in racer[2]:
             continue
         starters.append(racer)
     
@@ -147,9 +245,7 @@ def livetiming_scraper(race):
 
         # filter for did not finish, did not start, or disqualified
         if ("tt=" not in starter[-1] or
-            "DNF" in "".join(starter) or
-            "DNS" in "".join(starter) or
-            "DQ" in "".join(starter)):
+            "".join(starter) in TIMES_AS_LETTERS):
             competitor.time = 9999
         else:
             competitor.time = time_to_float(starter[-1][3:])
@@ -163,7 +259,7 @@ def time_to_float(time):
     time = re.sub(r'\s*\(\d+\)$', '', time.strip())
 
     # calculate time in seconds, but only for those who finished
-    if not time or time == "DNF" or time == "DNS":
+    if not time or time in TIMES_AS_LETTERS:
         return 9999
     # edge case for times under a minute
     elif ":" not in time:
