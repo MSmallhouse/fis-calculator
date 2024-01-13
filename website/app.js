@@ -4,9 +4,17 @@ const url = document.getElementById("urlInput");
 const eventSelector = document.getElementById("eventSelector");
 const minPenalty = document.getElementById("minPenalty");
 const form = document.getElementById("userInfo");
-const results = document.getElementById("results")
+const loader = document.getElementById("loader");
+const results = document.getElementById("results");
+const submitBtn = document.getElementById("submitBtn");
 form.setAttribute("action", lambdaURL);
 form.setAttribute("method", "get");
+
+loader.style.display = "none";
+
+submitBtn.addEventListener("click", () => {
+    loader.style.display = "block";
+})
 
 form.onsubmit = e => {
     e.preventDefault();
@@ -18,6 +26,7 @@ form.onsubmit = e => {
 
     fetch(requestURL).then(response => response.json())
         .then(data => {
+            loader.style.display = "none";
             console.log(data);
             // handle response from Lambda function
             for (let i=0; i<data.length; i++) {
@@ -27,9 +36,10 @@ form.onsubmit = e => {
             }
         })
         .catch(error => {
+            loader.style.display = "none";
             console.log("Error: ", error);
             const header = document.createElement("h4");
             header.textContent = "Something went wrong...";
-            document.body.append(header);
+            results.append(header);
         });
 }
