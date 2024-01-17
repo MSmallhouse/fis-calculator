@@ -31,7 +31,7 @@ form.onsubmit = e => {
             // handle response from Lambda function
             for (let i=0; i<data.length; i++) {
                 const header = document.createElement("h4");
-                header.textContent = `${i+1}. ${data[i]}`;
+                header.textContent = `${data[i]}`;
                 results.append(header);
             }
         })

@@ -4,8 +4,6 @@ import json
 # imports from user-defined modules
 from utils import connect_to_database
 from utils import scrape_results
-from utils import clean_name
-from utils import get_df_from_database
 
 class Race:
     def __init__(self, url, min_penalty, event):
@@ -46,6 +44,8 @@ class Race:
     def calculate_penalty(self, starting_racers_points):
         A, C = self.get_A_and_C()
         B = self.get_B(starting_racers_points)
+        print(f"PENALTY")
+        print(f"A: {A}, B: {B}, C: {C}")
         penalty = max((A+B-C)/10, self.min_penalty)
         self.penalty = round(penalty, 2)
         return
@@ -99,37 +99,32 @@ def get_race_points(competitor, race):
     return round(race_points, 2)
 
 def handler(event, context):
-    # TODO: build 2 more webscrapers - one for vola live timing and one for fis
-            # verify that these work even as a race is live
-            # add a method to Race class assigning proper scraping function
-            # could even have scrapers in another file??? not sure if works with lambda
-
-    # TODO: store not-found racers separately for displaying 
-    
-    #url = event["queryStringParameters"]["url"]
-    #min_penalty = event["queryStringParameters"]["min-penalty"]
-    #race_event = event["queryStringParameters"]["event"]
-    #race = Race(url, min_penalty, race_event)
-    URL = "https://vola.ussalivetiming.com/race/usa-nh-gunstock-mountain-resort-lafoley-spring-series-at-gunstock_26842.html"
-    MIN_PENALTY = "15"
-    EVENT = "SLpoints"
-    race = Race(URL, MIN_PENALTY, EVENT)
+    url = event["queryStringParameters"]["url"]
+    min_penalty = event["queryStringParameters"]["min-penalty"]
+    race_event = event["queryStringParameters"]["event"]
+    race = Race(url, min_penalty, race_event)
+    #URL = "https://vola.ussalivetiming.com/race/usa-nh-proctor-babson-carnival---race-1_31125.html"
+    #MIN_PENALTY = "23"
+    #EVENT = "SLpoints"
+    #race = Race(URL, MIN_PENALTY, EVENT)
 
     race.get_points()
-    not_finished = []
+    points_not_found = []
     finishers = []
     for competitor in race.competitors:
         # points = 1000 indicates not found in database
         #
         if competitor.fis_points == 1000:
-            not_finished.append(f"{competitor.full_name}: points not found, calculations might not be accurate")
+            points_not_found.append(f"{competitor.full_name}")
         # score = -1 indicates did not finish or did not start
         if competitor.score != -1:
             finishers.append(competitor)
 
-    output = [(f"{competitor.full_name}: {competitor.score}") for competitor in finishers]
-    for racer in not_finished:
+    output = [(f"{i+1}. {competitor.full_name}: {competitor.score}") for i, competitor in enumerate(finishers)]
+    for racer in points_not_found:
         output.insert(0, racer)
+    if points_not_found:
+        output.insert(0, "calculations might be off, points not found for the following racers:")
     
     try:
         return {
