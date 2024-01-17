@@ -87,12 +87,13 @@ def get_df_from_database(connection):
 
 def add_points_to_competitors(race, points_df):
     # lowercase for accurate matching
-    points_df["Firstname"] = points_df["Firstname"].str.lower()
-    points_df["Lastname"] = points_df["Lastname"].str.lower()
+    points_df["Firstname"] = points_df["Firstname"].str.lower().str.replace(" ", "")
+    points_df["Lastname"] = points_df["Lastname"].str.lower().str.replace(" ", "")
 
     for competitor in race.competitors:
-        mask = ((points_df["Lastname"] == competitor.last_name) &
-                (points_df["Firstname"] == competitor.first_name))
+        #print(f"{competitor.first_name}, {competitor.last_name}")
+        mask = ((points_df["Lastname"] == competitor.last_name.replace(" ","")) &
+                (points_df["Firstname"] == competitor.first_name.replace(" ","")))
         matching_row = points_df[mask]
 
         if matching_row.empty:
