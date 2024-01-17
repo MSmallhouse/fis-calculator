@@ -190,19 +190,16 @@ def vola_scraper(race):
                 race.competitors[id].time = time_to_float(names_and_times[i+1]['value'])
                 race.winning_time = min(race.winning_time, race.competitors[id].time)
 
-            #for competitor in race.competitors:
-            #    if competitor.full_name == full_name:
-            #        competitor.time = time_to_float(names_and_times[i+1]['value'])
-            #        race.winning_time = min(race.winning_time, competitor.time)
-            #        break
-    
     initialize_starting_racers()
     add_times_to_racers()
 
 def livetiming_scraper(race):
     #TODO if not speed race, calculate total time by adding run 1 and run 2
     # sometimes total time displays incorrectly
+    
+    # request URL to get raw data from livetiming
     URL = "https://www.live-timing.com/includes/aj_race." + race.url.split(".")[-1]
+
     # only get first names, run time
     # get both runs for tech races
     def is_valid_field_tech_race(field):
