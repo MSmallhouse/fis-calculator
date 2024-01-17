@@ -12,6 +12,10 @@ import pandas as pd
 from scrapers import vola_scraper
 from scrapers import livetiming_scraper
 
+# hack fix for now, assume Filippo collini is the person from Castleton
+# who is more likely to be in US races where this website will be used
+FILIPPO_COLLINI_FISCODE = 6293795
+
 def connect_to_database(race):
     race.logger = logging.getLogger()
     race.logger.setLevel(logging.INFO)
@@ -114,6 +118,14 @@ def add_points_to_competitors(race, points_df):
             competitor.fis_points = 999.99
         else:
             competitor.fis_points = points
+
+        # patch for bug with name clash - assume correct Filippo for US races
+        if competitor.full_name == "COLLINI, Filippo":
+            mask = points_df['Fiscode'] == FILIPPO_COLLINI_FISCODE
+            matching_row = points_df[mask]
+            competitor.fis_points = matching_row.iloc[0][race.event]
+            race.logger.error(f"POSSIBLE ERROR: Filippo Collini assigned points of {matching_row.iloc[0][race.event]}")
+
     return
 
 def split_names(race):
@@ -130,5 +142,7 @@ def scrape_results(race):
         split_names(race)
         points_df = get_df_from_database(race.connection)
         add_points_to_competitors(race, points_df)
+
     else:
+        # livetiming contains points internally, so no need to add them manually from database
         livetiming_scraper(race)
