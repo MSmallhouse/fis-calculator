@@ -91,7 +91,6 @@ def add_points_to_competitors(race, points_df):
     points_df["Lastname"] = points_df["Lastname"].str.lower().str.replace(" ", "")
 
     for competitor in race.competitors:
-        #print(f"{competitor.first_name}, {competitor.last_name}")
         mask = ((points_df["Lastname"] == competitor.last_name.replace(" ","")) &
                 (points_df["Firstname"] == competitor.first_name.replace(" ","")))
         matching_row = points_df[mask]
@@ -107,11 +106,15 @@ def add_points_to_competitors(race, points_df):
                 matching_row = points_df[mask]
 
                 if not matching_row.empty:
-                    print(f"POSSIBLE ERROR: Racer {competitor.first_name}, {competitor.last_name}'s assigned name: {matching_row.iloc[0]['Competitorname']}")
+                    race.logger.error(f"POSSIBLE ERROR: Racer {competitor.first_name}, {competitor.last_name}'s assigned name: {matching_row.iloc[0]['Competitorname']}")
         
         if matching_row.empty:
-            print(f"ERROR: Racer {competitor.first_name}, {competitor.last_name}'s points not found in database")
+            race.logger.error(f"ERROR: Racer {competitor.first_name}, {competitor.last_name}'s points not found in database")
             continue
+        
+        if len(matching_row) > 1:
+            race.logger.error(f"ERROR: name clash for dataframe row: {matching_row}")
+            
 
         points = matching_row.iloc[0][race.event]
         if points == -1:
@@ -125,7 +128,7 @@ def add_points_to_competitors(race, points_df):
             mask = points_df['Fiscode'] == FILIPPO_COLLINI_FISCODE
             matching_row = points_df[mask]
             competitor.fis_points = matching_row.iloc[0][race.event]
-            race.logger.error(f"POSSIBLE ERROR: Filippo Collini assigned points of {matching_row.iloc[0][race.event]}")
+            race.logger.info(f"POSSIBLE ERROR: Filippo Collini assigned points of {matching_row.iloc[0][race.event]}")
 
     return
 
