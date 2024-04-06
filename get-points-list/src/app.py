@@ -34,7 +34,7 @@ def compose_download_url(logger):
 	FILE_URL = "https://data.fis-ski.com/fis_athletes/ajax/fispointslistfunctions/export_fispointslist.html?export_csv=true&sectorcode=AL&seasoncode="
 
 	# adder of 26 to make this work, not really sure why
-	listid = 26
+	listid = 25
 
 	response = requests.get(POINTS_PAGE_URL)
 	if response.status_code != 200:
@@ -45,7 +45,9 @@ def compose_download_url(logger):
 
 	# get all div headings with the year, then grab the most recent one
 	year_divs = soup.find_all('div', {'class': 'g-xs g-sm g-md g-lg bold justify-center'})
-	year = year_divs[0].text
+	#print(f"year_divs: {year_divs}")
+	# TODO: fix ERROR later - this needs to be 2024 now but is showing 2025 as of 4/5/2024
+	year = year_divs[1].text
 
 	download_links = soup.find_all('a')
 	for link in download_links:
@@ -73,6 +75,7 @@ def compose_download_url(logger):
 
 def update_database(logger, connection, download_url):
 	# this response contains the csv with the most recent points list
+	print(download_url)
 	response = requests.get(download_url).content
 	df = pd.read_csv(io.StringIO(response.decode('utf-8')))
 	df = df.filter(items=["Fiscode", "Lastname", "Firstname", "Competitorname", "DHpoints",
