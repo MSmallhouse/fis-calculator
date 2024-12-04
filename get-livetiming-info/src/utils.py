@@ -9,6 +9,7 @@ import pymysql
 import pymysql.cursors
 import pandas as pd
 import boto3
+from botocore.exceptions import ClientError
 
 from scrapers import vola_scraper
 from scrapers import livetiming_scraper
@@ -78,20 +79,20 @@ def clean_name(name):
     return name
 
 
-def scan_dynamodb_table(table):
+def scan_dynamodb_table(race):
 	# DynamoDB uses pagination, paginate through response to collect all data
-	items = []
-	response = table.scan()
+    items = []
+    response = race.table.scan()
 
-	while 'LastEvaluatedKey' in response:
-		items.extend(response['Items'])
-		response = table.scan(ExclusiveStartKey=response['LastEvaluatedKey'])
+    while 'LastEvaluatedKey' in response:
+        items.extend(response['Items'])
+        response = race.table.scan(ExclusiveStartKey=response['LastEvaluatedKey'])
 	
-	items.extend(response['Items'])
-	return items
+    items.extend(response['Items'])
+    return items
 
-def get_df_from_database(table):
-    existing_data = scan_dynamodb_table(table)
+def get_df_from_database(race):
+    existing_data = scan_dynamodb_table(race)
     existing_df = pd.DataFrame(existing_data)
     existing_df = existing_df[["Fiscode", "Lastname", "Firstname", "Competitorname", "DHpoints", "SLpoints", "GSpoints", "SGpoints", "ACpoints"]]
 	# convert to numeric in case these are stored as strings in DynamoDB
@@ -174,7 +175,7 @@ def scrape_results(race):
     if "vola" in race.url:
         vola_scraper(race)
         split_names(race)
-        points_df = get_df_from_database(race.table)
+        points_df = get_df_from_database(race)
         add_points_to_competitors(race, points_df)
 
     else:
