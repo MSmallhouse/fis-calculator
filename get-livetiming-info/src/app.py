@@ -109,23 +109,23 @@ def handler(event, context):
     #race = Race(URL, MIN_PENALTY, EVENT)
 
     race.get_points()
-    points_not_found = []
+    points_not_found = ""
     finishers = []
     for competitor in race.competitors:
         # points = 1000 indicates not found in database
         #
-        print(f'{competitor.full_name} points: {competitor.fis_points}')
         if competitor.fis_points == 1000:
-            points_not_found.append(f"{competitor.full_name}")
+            points_not_found += competitor.full_name + ' '
         # score = -1 indicates did not finish or did not start
         if competitor.score != -1:
             finishers.append(competitor)
 
     output = [(f"{i+1}. {competitor.full_name}: {competitor.score}") for i, competitor in enumerate(finishers)]
-    for racer in points_not_found:
-        output.insert(0, racer)
+    #for racer in points_not_found:
+    #    output.insert(0, racer)
     if points_not_found:
-        output.insert(0, "calculations might be off, points not found for the following racers:")
+        output.insert(0, points_not_found)
+        output.insert(0, "calculations might be off, points not found for the following racers: ")
     
     try:
         return {
