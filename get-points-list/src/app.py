@@ -10,31 +10,45 @@ import pymysql
 import pymysql.cursors
 import pandas as pd
 import io
+import boto3
+from decimal import Decimal
 
-def connect_to_database(logger):
-	ENDPOINT = "fis-points-database.cby1setpagel.us-east-2.rds.amazonaws.com"
-	USERNAME = "admin"
-	PASSWORD = "password"
-	DATABASE_NAME = "fis_points"
-
+def connect_to_dynamo_db(logger): 
 	try:
-		connection = pymysql.connect(host=ENDPOINT, user=USERNAME, passwd=PASSWORD,
-									 db=DATABASE_NAME, connect_timeout=5,
-									 cursorclass=pymysql.cursors.DictCursor)
-	except pymysql.MySQLError as e:
-		logger.error("ERROR: Unexpected error: Could not connect to MySQL instance.")
+		client = boto3.resource('dynamodb')
+		table = client.Table('points_list_dynamo_db')
+	except Exception as e:
+		logger.error("ERROR: Failed to connect to DynamoDB")
 		logger.error(e)
 		sys.exit()
+	
+	logger.info("SUCCESS: Connection to DynamoDB Table succeeded")
+	return table
 
-	logger.info("SUCCESS: Connection to RDS for MySQL instance succeeded")
-	return connection
+#def connect_to_database(logger):
+#	ENDPOINT = "fis-points-database.cby1setpagel.us-east-2.rds.amazonaws.com"
+#	USERNAME = "admin"
+#	PASSWORD = "password"
+#	DATABASE_NAME = "fis_points"
+#
+#	try:
+#		connection = pymysql.connect(host=ENDPOINT, user=USERNAME, passwd=PASSWORD,
+#									 db=DATABASE_NAME, connect_timeout=5,
+#									 cursorclass=pymysql.cursors.DictCursor)
+#	except pymysql.MySQLError as e:
+#		logger.error("ERROR: Unexpected error: Could not connect to MySQL instance.")
+#		logger.error(e)
+#		sys.exit()
+#
+#	logger.info("SUCCESS: Connection to RDS for MySQL instance succeeded")
+#	return connection
 
 def compose_download_url(logger):
 	POINTS_PAGE_URL = "https://www.fis-ski.com/DB/alpine-skiing/fis-points-lists.html"
 	FILE_URL = "https://data.fis-ski.com/fis_athletes/ajax/fispointslistfunctions/export_fispointslist.html?export_csv=true&sectorcode=AL&seasoncode="
 
 	# adder of 26 to make this work, not really sure why
-	listid = 25
+	listid = 65
 
 	response = requests.get(POINTS_PAGE_URL)
 	if response.status_code != 200:
@@ -71,11 +85,10 @@ def compose_download_url(logger):
 		listid -= 1
 
 	# compose download url for the most recent valid list
-	return FILE_URL + year + "&listid=" + str(listid)
+	return FILE_URL + "2025" + "&listid=" + str(listid)
 
-def update_database(logger, connection, download_url):
+def update_dynamodb(logger, table, download_url): 
 	# this response contains the csv with the most recent points list
-	print(download_url)
 	response = requests.get(download_url).content
 	df = pd.read_csv(io.StringIO(response.decode('utf-8')))
 	df = df.filter(items=["Fiscode", "Lastname", "Firstname", "Competitorname", "DHpoints",
@@ -84,57 +97,79 @@ def update_database(logger, connection, download_url):
 	# competitors with no points will be labeled -1
 	df = df.fillna(-1)
 
-	with connection:
-		with connection.cursor() as cursor:
-			# see what rows need to be changed
-			updated_rows = dataframe_differential(df, cursor)
+	# obtain differential so that we limit dynamodb time by only inserting what is necessary
+	df = filter_rows_needing_update(df, table)
+	logger.info(f"UPDATES: {df.shape[0]} rows in database to be updated")
 
-			# log number of rows in update
-			logger.info(f"UPDATES: {updated_rows.shape[0]} rows in database updated")
-			
-			# update or insert necessary rows
-			insert_update(updated_rows, cursor)
+	rows = df.to_dict(orient="records")
 
-			# connection not autocommitted by default
-			connection.commit()
-			cursor.close()
+	# DynamoDB doesn't support float, convert to Decimal
+	for row in rows:
+		# Fiscode must be a string for DynamoDB key
+		row['Fiscode'] = str(row['Fiscode'])
+		for key, value in row.items():
+			if isinstance(value, float):
+				row[key] = Decimal(str(value))
 
-def insert_update(df, cursor):
-	for index, row in df.iterrows():
-		# insert row if not already present in database
-		# if present, update already existing row
-		sql = """INSERT INTO `point_entries` (`Fiscode`, `Lastname`, `Firstname`,
-											`Competitorname`, `DHpoints`, `SLpoints`,
-											`GSpoints`, `SGpoints`, `ACpoints`)
-				VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-				ON DUPLICATE KEY UPDATE
-				Lastname = VALUES(Lastname),
-				Firstname = VALUES(Firstname),
-				Competitorname = VALUES(Competitorname),
-				DHpoints = VALUES(DHpoints),
-				SLpoints = VALUES(SLpoints),
-				GSpoints = VALUES(GSpoints),
-				SGpoints = VALUES(SGpoints),
-				ACpoints = VALUES(ACpoints)
-				"""
+	responses = []
+	for row in rows:
+		fiscode = row.get('Fiscode')
+		if not fiscode:
+			logger.error("Missing 'Fiscode' in row in DynamoDB.")
+			continue
+            
+		# Check if individual exists
+		existing_item = table.get_item(Key={'Fiscode': fiscode})
+            
+		if 'Item' in existing_item:
+		# Update existing item
+			update_expression = """
+				SET 
+					Lastname = :lastname,
+					Firstname = :firstname,
+					Competitorname = :competitorname,
+					DHpoints = :dhpoints,
+					SLpoints = :slpoints,
+					GSpoints = :gspoints,
+					SGpoints = :sgpoints,
+					ACpoints = :acpoints
+			"""
+			expression_attribute_values = {
+				':lastname': row.get('Lastname', ''),
+				':firstname': row.get('Firstname', ''),
+				':competitorname': row.get('Competitorname', ''),
+				':dhpoints': row.get('DHpoints', -1),
+				':slpoints': row.get('SLpoints', -1),
+				':gspoints': row.get('GSpoints', -1),
+				':sgpoints': row.get('SGpoints', -1),
+				':acpoints': row.get('ACpoints', -1),
+			}
+                
+			table.update_item(
+				Key={'Fiscode': fiscode},
+				UpdateExpression=update_expression,
+				ExpressionAttributeValues=expression_attribute_values
+			)
+			responses.append({'Fiscode': fiscode, 'action': 'updated'})
+		else:
+			# Insert new item
+			table.put_item(Item=row)
+			responses.append({'Fiscode': fiscode, 'action': 'inserted'})
 
-		cursor.execute(sql, (row["Fiscode"], row["Lastname"], row["Firstname"],
-							row["Competitorname"], row["DHpoints"], row["SLpoints"],
-							row["GSpoints"], row["SGpoints"], row["ACpoints"]))
+def filter_rows_needing_update(new_df, table):
+	existing_data = scan_dynamodb_table(table)
+	existing_df = pd.DataFrame(existing_data)
+	existing_df = existing_df[["Fiscode", "Lastname", "Firstname", "Competitorname", "DHpoints", "SLpoints", "GSpoints", "SGpoints", "ACpoints"]]
+	# convert to numeric in case these are stored as strings in DynamoDB
+	existing_df[["DHpoints", "SLpoints", "GSpoints", "SGpoints", "ACpoints"]] = existing_df[["DHpoints", "SLpoints", "GSpoints", "SGpoints", "ACpoints"]].apply(pd.to_numeric, errors='coerce')
 
-def dataframe_differential(df, cursor):
-	# get existing data, compare against downloaded data
-	query = "SELECT * FROM fis_points.point_entries"
-	cursor.execute(query)
-	existing_data = cursor.fetchall()
-
-	column_names = ["Fiscode", "Lastname", "Firstname", "Competitorname", "DHpoints",
-				   	"SLpoints", "GSpoints", "SGpoints", "ACpoints"]
-	existing_df = pd.DataFrame(existing_data, columns=column_names)
+	# need to convert these to strings for correct comparison
+	existing_df["Fiscode"] = existing_df["Fiscode"].astype(str)
+	new_df["Fiscode"] = new_df["Fiscode"].astype(str)
 
 	# compare to get updated rows, or new rows
 	updated_rows = []
-	for index, new_row in df.iterrows():
+	for index, new_row in new_df.iterrows():
 		fiscode = new_row["Fiscode"]
 
 		if fiscode not in existing_df["Fiscode"].values:
@@ -146,14 +181,104 @@ def dataframe_differential(df, cursor):
 		existing_row = existing_df[existing_df["Fiscode"] == fiscode].iloc[0]
 		if not new_row.equals(existing_row):
 			updated_rows.append(new_row)
-			
 	return pd.DataFrame(updated_rows)
+
+def scan_dynamodb_table(table):
+	# DynamoDB uses pagination, paginate through response to collect all data
+	items = []
+	response = table.scan()
+
+	while 'LastEvaluatedKey' in response:
+		items.extend(response['Items'])
+		response = table.scan(ExclusiveStartKey=response['LastEvaluatedKey'])
+	
+	items.extend(response['Items'])
+	return items
+
+#def update_sql_database(logger, connection, download_url):
+#	# this response contains the csv with the most recent points list
+#	print(download_url)
+#	response = requests.get(download_url).content
+#	df = pd.read_csv(io.StringIO(response.decode('utf-8')))
+#	df = df.filter(items=["Fiscode", "Lastname", "Firstname", "Competitorname", "DHpoints",
+#					      "SLpoints", "GSpoints", "SGpoints", "ACpoints"])
+#
+#	# competitors with no points will be labeled -1
+#	df = df.fillna(-1)
+#
+#	with connection:
+#		with connection.cursor() as cursor:
+#			# see what rows need to be changed
+#			updated_rows = dataframe_differential(df, cursor)
+#
+#			# log number of rows in update
+#			logger.info(f"UPDATES: {updated_rows.shape[0]} rows in database updated")
+#			
+#			# update or insert necessary rows
+#			insert_update(updated_rows, cursor)
+#
+#			# connection not autocommitted by default
+#			connection.commit()
+#			cursor.close()
+#
+#def insert_update(df, cursor):
+#	for index, row in df.iterrows():
+#		# insert row if not already present in database
+#		# if present, update already existing row
+#		sql = """INSERT INTO `point_entries` (`Fiscode`, `Lastname`, `Firstname`,
+#											`Competitorname`, `DHpoints`, `SLpoints`,
+#											`GSpoints`, `SGpoints`, `ACpoints`)
+#				VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+#				ON DUPLICATE KEY UPDATE
+#				Lastname = VALUES(Lastname),
+#				Firstname = VALUES(Firstname),
+#				Competitorname = VALUES(Competitorname),
+#				DHpoints = VALUES(DHpoints),
+#				SLpoints = VALUES(SLpoints),
+#				GSpoints = VALUES(GSpoints),
+#				SGpoints = VALUES(SGpoints),
+#				ACpoints = VALUES(ACpoints)
+#				"""
+#
+#		cursor.execute(sql, (row["Fiscode"], row["Lastname"], row["Firstname"],
+#							row["Competitorname"], row["DHpoints"], row["SLpoints"],
+#							row["GSpoints"], row["SGpoints"], row["ACpoints"]))
+#
+#def dataframe_differential(df, cursor):
+#	# get existing data, compare against downloaded data
+#	query = "SELECT * FROM fis_points.point_entries"
+#	cursor.execute(query)
+#	existing_data = cursor.fetchall()
+#
+#	column_names = ["Fiscode", "Lastname", "Firstname", "Competitorname", "DHpoints",
+#				   	"SLpoints", "GSpoints", "SGpoints", "ACpoints"]
+#	existing_df = pd.DataFrame(existing_data, columns=column_names)
+#
+#	# compare to get updated rows, or new rows
+#	updated_rows = []
+#	for index, new_row in df.iterrows():
+#		fiscode = new_row["Fiscode"]
+#
+#		if fiscode not in existing_df["Fiscode"].values:
+#			# person doesn't exist, they must be added to database
+#			updated_rows.append(new_row)
+#			continue
+#
+#		# person exists, see if their points need to be updated
+#		existing_row = existing_df[existing_df["Fiscode"] == fiscode].iloc[0]
+#		if not new_row.equals(existing_row):
+#			updated_rows.append(new_row)
+#			
+#	return pd.DataFrame(updated_rows)
 
 def lambda_handler(event=None, context=None):
 	# set up logger
 	logger = logging.getLogger()
 	logger.setLevel(logging.INFO)
 
-	connection = connect_to_database(logger)
 	download_url = compose_download_url(logger)
-	update_database(logger, connection, download_url)
+
+	#connection = connect_to_database(logger)
+	#update_sql_database(logger, connection, download_url)
+	table = connect_to_dynamo_db(logger)
+	update_dynamodb(logger, table, download_url)

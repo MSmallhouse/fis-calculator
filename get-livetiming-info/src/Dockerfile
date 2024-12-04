@@ -18,7 +18,7 @@ RUN /usr/bin/bash /tmp/install-browser.sh
 FROM public.ecr.aws/lambda/python:3.9 as base
 
 COPY chrome-deps.txt /tmp/
-RUN yum install -y $(cat /tmp/chrome-deps.txt)
+#RUN yum install -y $(cat /tmp/chrome-deps.txt)
 
 # Install Python dependencies for function
 COPY requirements.txt /tmp/
@@ -30,6 +30,6 @@ COPY --from=stage /opt/chrome /opt/chrome
 COPY --from=stage /opt/chromedriver /opt/chromedriver
 COPY app.py ${LAMBDA_TASK_ROOT}
 COPY utils.py ${LAMBDA_TASK_ROOT}
-copy scrapers.py ${LAMBDA_TASK_ROOT}
+COPY scrapers.py ${LAMBDA_TASK_ROOT}
 
 CMD [ "app.handler" ]

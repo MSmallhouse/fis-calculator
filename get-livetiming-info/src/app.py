@@ -44,8 +44,6 @@ class Race:
     def calculate_penalty(self, starting_racers_points):
         A, C = self.get_A_and_C()
         B = self.get_B(starting_racers_points)
-        print(f"PENALTY")
-        print(f"A: {A}, B: {B}, C: {C}")
         penalty = max((A+B-C)/10, self.min_penalty)
         self.penalty = round(penalty, 2)
         return
@@ -74,6 +72,8 @@ class Race:
         return A, C
 
     def get_B(self, starting_racers_points):
+        #TODO: get top 5 out of seed
+        # make sure to check DNS - time == 9999
         # B = top 5 points at start
         starting_racers_points.sort()
         return sum(starting_racers_points[:5])
@@ -103,9 +103,9 @@ def handler(event, context):
     min_penalty = event["queryStringParameters"]["min-penalty"]
     race_event = event["queryStringParameters"]["event"]
     race = Race(url, min_penalty, race_event)
-    #URL = "https://vola.ussalivetiming.com/race/usa-nh-proctor-babson-carnival---race-1_31125.html"
+    #URL = "https://vola.ussalivetiming.com/race/usa-vt-stowe-mountain-resort--spruce-peak-womens-eastern-cup_31816.html"
     #MIN_PENALTY = "23"
-    #EVENT = "SLpoints"
+    #EVENT = "GSpoints"
     #race = Race(URL, MIN_PENALTY, EVENT)
 
     race.get_points()
@@ -114,6 +114,7 @@ def handler(event, context):
     for competitor in race.competitors:
         # points = 1000 indicates not found in database
         #
+        print(f'{competitor.full_name} points: {competitor.fis_points}')
         if competitor.fis_points == 1000:
             points_not_found.append(f"{competitor.full_name}")
         # score = -1 indicates did not finish or did not start

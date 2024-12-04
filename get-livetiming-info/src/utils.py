@@ -8,6 +8,7 @@ import logging
 import pymysql
 import pymysql.cursors
 import pandas as pd
+import boto3
 
 from scrapers import vola_scraper
 from scrapers import livetiming_scraper
@@ -20,17 +21,25 @@ def connect_to_database(race):
     race.logger = logging.getLogger()
     race.logger.setLevel(logging.INFO)
 
-    # make database connection
     try:
-        race.connection = pymysql.connect(host=race.ENDPOINT, user=race.USERNAME,
-                                        passwd=race.PASSWORD,db=race.DATABASE_NAME,
-                                        connect_timeout=5,
-                                        cursorclass=pymysql.cursors.DictCursor)
-    except pymysql.MySQLError as e:
-        race.logger.error("ERROR: Unexpected error: Could not connect to MySQL instance.")
+        client = boto3.resource('dynamodb')
+        race.table = client.Table('points_list_dynamo_db')
+    except Exception as e:
+        race.logger.error("ERROR: Failed to connect to DynamoDB")
         race.logger.error(e)
         sys.exit()
-    race.logger.info("SUCCESS: Connection to RDS for MySQL instance succeeded")
+
+    # make database connection
+    #try:
+    #    race.connection = pymysql.connect(host=race.ENDPOINT, user=race.USERNAME,
+    #                                    passwd=race.PASSWORD,db=race.DATABASE_NAME,
+    #                                    connect_timeout=5,
+    #                                    cursorclass=pymysql.cursors.DictCursor)
+    #except pymysql.MySQLError as e:
+    #    race.logger.error("ERROR: Unexpected error: Could not connect to MySQL instance.")
+    #    race.logger.error(e)
+    #    sys.exit()
+    #race.logger.info("SUCCESS: Connection to RDS for MySQL instance succeeded")
     return
 
 # Initialize selenium, used as webscraper to get names and race times
@@ -69,21 +78,42 @@ def clean_name(name):
     return name
 
 
-def get_df_from_database(connection):
-    with connection:
-        with connection.cursor() as cursor:
-            # get df of full RDS database
-            query = "SELECT * FROM fis_points.point_entries"
-            cursor.execute(query)
-            existing_data = cursor.fetchall()
+def scan_dynamodb_table(table):
+	# DynamoDB uses pagination, paginate through response to collect all data
+	items = []
+	response = table.scan()
 
-            column_names = ["Fiscode", "Lastname", "Firstname", "Competitorname", "DHpoints",
-                            "SLpoints", "GSpoints", "SGpoints", "ACpoints"]
+	while 'LastEvaluatedKey' in response:
+		items.extend(response['Items'])
+		response = table.scan(ExclusiveStartKey=response['LastEvaluatedKey'])
+	
+	items.extend(response['Items'])
+	return items
 
-            # connection not autocommitted by default
-            connection.commit()
-            cursor.close()
-    return pd.DataFrame(existing_data, columns=column_names)
+def get_df_from_database(table):
+    existing_data = scan_dynamodb_table(table)
+    existing_df = pd.DataFrame(existing_data)
+    existing_df = existing_df[["Fiscode", "Lastname", "Firstname", "Competitorname", "DHpoints", "SLpoints", "GSpoints", "SGpoints", "ACpoints"]]
+	# convert to numeric in case these are stored as strings in DynamoDB
+    existing_df[["DHpoints", "SLpoints", "GSpoints", "SGpoints", "ACpoints"]] = existing_df[["DHpoints", "SLpoints", "GSpoints", "SGpoints", "ACpoints"]].apply(pd.to_numeric, errors='coerce')
+    #with connection:
+    #    with connection.cursor() as cursor:
+    #        # get df of full RDS database
+    #        query = "SELECT * FROM fis_points.point_entries"
+    #        cursor.execute(query)
+    #        existing_data = cursor.fetchall()
+
+    #        column_names = ["Fiscode", "Lastname", "Firstname", "Competitorname", "DHpoints",
+    #                        #"SLpoints", "GSpoints", "SGpoints", "ACpoints"]
+
+    #        # connection not autocommitted by default
+    #        connection.commit()
+    #        cursor.close()
+    #return pd.DataFrame(existing_data, columns=column_names)
+
+    column_names = ["Fiscode", "Lastname", "Firstname", "Competitorname", "DHpoints",
+                    "SLpoints", "GSpoints", "SGpoints", "ACpoints"]
+    return pd.DataFrame(existing_df, columns=column_names)
 
 def add_points_to_competitors(race, points_df):
     # lowercase for accurate matching
@@ -144,7 +174,7 @@ def scrape_results(race):
     if "vola" in race.url:
         vola_scraper(race)
         split_names(race)
-        points_df = get_df_from_database(race.connection)
+        points_df = get_df_from_database(race.table)
         add_points_to_competitors(race, points_df)
 
     else:

@@ -11,6 +11,7 @@ class Competitor:
         self.time = 9999
         self.fis_points = 1000
         self.score = -1
+        self.start_order = 9999
 
     def __str__(self):
         return f"{self.full_name} score: {self.score}"
@@ -50,7 +51,7 @@ def vola_scraper(race):
 
         return requests.post(url, headers=headers, data=payload)
 
-    def is_time_field(value):
+    def is_numeric_field(value):
         value = value.strip()
         if value in TIMES_AS_LETTERS:
             return True
@@ -68,7 +69,7 @@ def vola_scraper(race):
             if i+2 > len(fields)-1: # out of index
                 continue
 
-            if is_time_field(fields[i+2]['value']):
+            if is_numeric_field(fields[i+2]['value']):
                 continue_count = 2
                 # append first name, last name, and time
                 fields_with_times.append(fields[i])
@@ -95,6 +96,43 @@ def vola_scraper(race):
         
         return transformed_fields
 
+    def extract_startlist():
+        #TODO: make this work...
+        # sometimes names are given as full names, sometimes they are given separated by first/last
+        first_last_names_separate = False
+        valid_fields = set()
+        # get run 1 info
+        fields = send_request("GetHeatListFields", 1)
+        if fields.status_code == 200:
+            # extract where names and times are stored
+            data = fields.json()
+            fields = data['DATA']['field']
+            for field in fields:
+                if ("order" in field['title'].lower() or "name" in field['title'].lower() 
+                    or "time" in field['title'].lower()):
+                    valid_fields.add((field['grid'], field['col']))
+                if "first" in field['title'].lower() or "last" in field['title'].lower():
+                    first_last_names_separate = True
+
+        values = send_request("GetHeatListValues", 1)
+
+        names_and_start_order = []
+        if values.status_code == 200:
+            # get names and times 
+            data = values.json()
+            fields = data['DATA']['fieldvalue']
+            for field in fields:
+                # HTML non-breaking space, doesn't contain data so skip these
+                if "&nbsp" in field['value']:
+                    continue
+                if (field['grid'], field['col']) in valid_fields:
+                    names_and_start_order.append(field)
+
+            if first_last_names_separate:
+                names_and_start_order= combine_first_last_name_fields(names_and_start_order)
+
+        return names_and_start_order
+
     def extract_names_and_times(run_number):
         # sometimes names are given as full names, sometimes they are given separated by first/last
         first_last_names_separate = False
@@ -105,7 +143,7 @@ def vola_scraper(race):
             data = fields.json()
             fields = data['DATA']['field']
             for field in fields:
-                if "name" in field['title'].lower() or "time" in field['title'].lower():
+                if "time" in field['title'].lower() or "name" in field['title'].lower():
                     valid_fields.add((field['grid'], field['col']))
                 if "first" in field['title'].lower() or "last" in field['title'].lower():
                     first_last_names_separate = True
@@ -123,6 +161,7 @@ def vola_scraper(race):
                     continue
                 if (field['grid'], field['col']) in valid_fields:
                     names_and_times.append(field)
+                    print(f"grid: {field['grid']}  {field['value']}")
 
             if first_last_names_separate:
                 names_and_times = combine_first_last_name_fields(names_and_times)
@@ -146,19 +185,20 @@ def vola_scraper(race):
         
 
     def initialize_starting_racers():
-        names_and_times = extract_names_and_times("1")
+        # TODO: FIX THIS NEXT
+        # TODO: fix calculation if someone DNS's
+        # set their points to be 1000
+        names_and_start_order = extract_startlist()
 
         racers = set() # for duplicate detection
-        for i in range(len(names_and_times)):
-            if is_time_field(names_and_times[i]['value']):
+        # TODO: make this loop add start order if possible
+        # to get points for only people starting in the seed
+        for i in range(len(names_and_start_order)):
+            # fix for now to skip start order
+            if is_numeric_field(names_and_start_order[i]['value']):
                 continue
 
-            # only consider racers who started at least the first run
-            full_name = add_comma_to_full_name(names_and_times[i]['value'])
-            if i < len(names_and_times)-1 and (
-                "DNS" in names_and_times[i+1]['value'] or "Did Not Start" in names_and_times[i+1]['value']):
-                continue
-
+            full_name = add_comma_to_full_name(names_and_start_order[i]['value'])
             if full_name in racers:
                 continue
 
@@ -177,17 +217,29 @@ def vola_scraper(race):
         for i in range(len(race.competitors)):
             competitor_ids[race.competitors[i].full_name] = i
 
-        for i in range(len(names_and_times)-1):
-            # needs to have field be a name, and following field be a time
-            if not is_time_field(names_and_times[i+1]['value']):
-                continue
-            if is_time_field(names_and_times[i]['value']):
+        for i in range(0, len(names_and_times), 2):
+            full_name = ""
+            time = 9999
+            if i >= len(names_and_times) - 1: # exit before next part gives indexing error
                 continue
 
-            full_name = add_comma_to_full_name(names_and_times[i]['value'])
+            # times/names returned in groups of two, but no guarantee of order
+            # assign correct field to name/time
+            if is_numeric_field(names_and_times[i]['value']):
+                time = names_and_times[i]['value']
+                full_name = names_and_times[i+1]['value']
+            else:
+                full_name = names_and_times[i]['value']
+                time = names_and_times[i+1]['value']
+            
+            # only assign times if started second run
+            if "DNS" in time or "Did Not Start" in time:
+                continue
+
+            full_name = add_comma_to_full_name(full_name)
             if full_name in competitor_ids:
                 id = competitor_ids[full_name]
-                race.competitors[id].time = time_to_float(names_and_times[i+1]['value'])
+                race.competitors[id].time = time_to_float(time)
                 race.winning_time = min(race.winning_time, race.competitors[id].time)
 
     initialize_starting_racers()

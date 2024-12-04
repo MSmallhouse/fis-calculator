@@ -2,3 +2,4 @@ selenium
 requests
 pandas
 pymysql
+boto3
