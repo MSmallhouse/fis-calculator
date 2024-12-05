@@ -37,12 +37,35 @@ form.onsubmit = e => {
                 results.append(warning);
                 results.append(notFound);
             }
-            for (let i=0; i<data.results.length; i++) {
-                const header = document.createElement("h4");
-                header.classList.add("my-3");
-                header.textContent = `${data.results[i]}`;
-                results.append(header);
-            }
+
+            const table = document.createElement("table");
+            const tableHead = document.createElement("thead");
+            const tableBody = document.createElement("tbody");
+            const headerRow = document.createElement("tr");
+            headerRow.innerHTML = `
+                <th>Place</th>
+                <th>Name</th>
+                <th>Score</th>`;
+            tableHead.append(headerRow);
+            table.append(tableHead);
+
+            data.results.forEach(result => {
+                const row = document.createElement("tr");
+                const placeCell = document.createElement("td");
+                const nameCell = document.createElement("td");
+                const scoreCell = document.createElement("td");
+
+                placeCell.textContent = result.place;
+                nameCell.textContent = result.name;
+                scoreCell.textContent = result.score;
+                row.append(placeCell);
+                row.append(nameCell);
+                row.append(scoreCell);
+                tableBody.append(row);
+            });
+
+            table.append(tableBody);
+            results.append(table)
         })
         .catch(error => {
             loader.style.display = "none";
