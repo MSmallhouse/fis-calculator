@@ -29,9 +29,10 @@ form.onsubmit = e => {
             loader.style.display = "none";
             console.log(data);
             // handle response from Lambda function
-            for (let i=0; i<data.length; i++) {
+            for (let i=0; i<data.results.length; i++) {
                 const header = document.createElement("h4");
-                header.textContent = `${data[i]}`;
+                header.classList.add("my-3");
+                header.textContent = `${data.results[i]}`;
                 results.append(header);
             }
         })
