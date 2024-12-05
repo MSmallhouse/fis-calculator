@@ -27,8 +27,16 @@ form.onsubmit = e => {
     fetch(requestURL).then(response => response.json())
         .then(data => {
             loader.style.display = "none";
-            console.log(data);
             // handle response from Lambda function
+            console.log(data);
+            if (data.notFound) {
+                const warning = document.createElement("p");
+                warning.textContent = "results might be off, points not found for:";
+                const notFound = document.createElement("p");
+                notFound.textContent = `${data.notFound}`
+                results.append(warning);
+                results.append(notFound);
+            }
             for (let i=0; i<data.results.length; i++) {
                 const header = document.createElement("h4");
                 header.classList.add("my-3");
