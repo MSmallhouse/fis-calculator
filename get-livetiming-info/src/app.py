@@ -120,17 +120,23 @@ def handler(event, context):
         if competitor.score != -1:
             finishers.append(competitor)
 
-    output = [(f"{i+1}. {competitor.full_name}: {competitor.score}") for i, competitor in enumerate(finishers)]
-    #for racer in points_not_found:
-    #    output.insert(0, racer)
-    if points_not_found:
-        output.insert(0, points_not_found)
-        output.insert(0, "calculations might be off, points not found for the following racers: ")
+    output = [
+        {
+            "place": i+1,
+            "name": competitor.full_name,
+            "score": competitor.score
+        }
+        for i, competitor in enumerate(finishers)
+    ]
+    return_data = {
+        "results": output,
+        "notFound": points_not_found
+    }
     
     try:
         return {
             "statusCode": 200,
-            "body": json.dumps(output)
+            "body": json.dumps(return_data)
         }
 
     except Exception as e:
