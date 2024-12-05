@@ -30,7 +30,6 @@ table {
     margin: 25px 0;
     font-size: 0.9em;
     font-family: sans-serif;
-    min-width: 400px;
     box-shadow: 0 0 5px rgba(0, 0, 0, 0.15);
 }
 
@@ -75,4 +74,8 @@ form input, form select, form button {
 
 #submitBtn:hover {
   background-color: #007f63;
+}
+
+input, select {
+  height: 45px;
 }

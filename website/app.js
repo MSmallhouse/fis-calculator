@@ -57,6 +57,7 @@ form.onsubmit = e => {
 
                 placeCell.textContent = result.place;
                 nameCell.textContent = result.name;
+                nameCell.classList.add("text-break")
                 scoreCell.textContent = result.score;
                 row.append(placeCell);
                 row.append(nameCell);
