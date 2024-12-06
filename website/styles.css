@@ -98,6 +98,8 @@ form input, form select, form button {
 input, select {
   height: 45px;
   box-sizing: border-box;
+  background: white;
+  color: rgb(0, 0, 0, 0.6);
 }
 
 #results {
