@@ -10,7 +10,6 @@ const submitBtn = document.getElementById("submitBtn");
 form.setAttribute("action", lambdaURL);
 form.setAttribute("method", "get");
 
-loader.style.display = "none";
 const select = document.querySelectorAll("select");
 select.forEach(selectElement => {
     selectElement.onchange = function() {
