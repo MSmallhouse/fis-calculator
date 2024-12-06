@@ -85,7 +85,6 @@ form input, form select, form button {
   border-radius: 5px;
   margin-bottom: 10px;
   width: 100%;
-  outline: none;
 }
 
 #submitBtn {
@@ -105,10 +104,6 @@ input[type=text], select {
   box-sizing: border-box;
   background: white;
   color: rgb(0, 0, 0);
-}
-
-input:focus, select:focus {
-  outline: none;
 }
 
 input::placeholder {
