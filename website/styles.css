@@ -107,6 +107,10 @@ input[type=text], select {
   color: rgb(0, 0, 0);
 }
 
+input:focus, select:focus {
+  outline: none;
+}
+
 input::placeholder {
   color: rgb(0, 0, 0, 0.6) !important;
 }
