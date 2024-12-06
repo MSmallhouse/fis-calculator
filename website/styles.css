@@ -95,11 +95,23 @@ form input, form select, form button {
   background-color: #007f63;
 }
 
-input, select {
+input[type=text], select {
   height: 45px;
   box-sizing: border-box;
   background: white;
+  color: rgb(0, 0, 0);
+}
+
+input::placeholder {
+  color: rgb(0, 0, 0, 0.6) !important;
+}
+
+select {
   color: rgb(0, 0, 0, 0.6);
+}
+
+.option-selected-color {
+  color: rgb(0, 0, 0);
 }
 
 #results {
