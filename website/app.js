@@ -67,6 +67,7 @@ form.onsubmit = e => {
 
             table.append(tableBody);
             results.append(table)
+            results.scrollIntoView({behavior: 'smooth'});
         })
         .catch(error => {
             loader.style.display = "none";

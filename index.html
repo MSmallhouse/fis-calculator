@@ -15,41 +15,33 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FIS Points Calculator</title>
   <script src="website/app.js" defer></script>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
   <link rel="stylesheet" href="website/styles.css">
 </head>
 <body>
-  <div class="container p-3 d-flex flex-column align-items-center">
+  <div class="container">
     <h1>Fis Points Calculator</h1>
-    <br>
     <p>Works for livetiming and vola/ussa livetiming, results for fis livetiming in progress</p>
     <br>
-    <div class="row">
-      <div class="col">
-        <form class="mb-5" id="userInfo">
-          <input class="my-1" type="text" placeholder="livetiming url" name="url" id="urlInput">
-          <select class="my-1" name="minPenalty" id="minPenalty">
-            <option value="null">-- type of competition --</option>
-            <option value="23">Open FIS</option>
-            <option value="20">National Championship</option>
-            <option value="15">Noram/Europa Cup</option>
-            <option value="0">World Cup</option>
-          </select>
-          <select class="my-1" name="event" id ="eventSelector">
-            <option value="null">-- event --</option>
-            <option value="SLpoints">SL</option>
-            <option value="GSpoints">GS</option>
-            <option value="SGpoints">SG</option>
-            <option value="DHpoints">DH</option>
-          </select>
-          <input class="my-1" id = "submitBtn" type="submit" value="Submit">
-        </form>
-      </div>
-    </div>
-    <div class="row">
-      <div style="display: block" id="loader"></div>
-      <div id="results"></div>
-    </div>
+    <form id="userInfo">
+      <input type="text" placeholder="livetiming url" name="url" id="urlInput">
+      <select name="minPenalty" id="minPenalty">
+        <option value="null">-- type of competition --</option>
+        <option value="23">Open FIS</option>
+        <option value="20">National Championship</option>
+        <option value="15">Noram/Europa Cup</option>
+        <option value="0">World Cup</option>
+      </select>
+      <select name="event" id ="eventSelector">
+        <option value="null">-- event --</option>
+        <option value="SLpoints">SL</option>
+        <option value="GSpoints">GS</option>
+        <option value="SGpoints">SG</option>
+        <option value="DHpoints">DH</option>
+      </select>
+      <input id = "submitBtn" type="submit" value="Submit">
+    </form>
+    <div id="loader"></div>
+    <div id="results"></div>
   </div>
 </body>
 </html>
