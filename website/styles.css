@@ -1,6 +1,7 @@
 body {
   font-family: sans-serif;
   line-height: 1.5;
+  background-color: rgb(254, 252, 245);
 }
 
 .container {
@@ -11,6 +12,7 @@ body {
 }
 
 form {
+  background-color: white;
   height: auto;
   max-width: 400px;
   padding: 15px;
@@ -42,18 +44,19 @@ h1 {
 }
 
 table {
-    border-collapse: collapse;
-    margin: 25px 0;
-    font-size: 0.9em;
-    max-width: 600px;
-    font-family: sans-serif;
-    box-shadow: 0 0 5px rgba(0, 0, 0, 0.15);
+  background-color: white;
+  border-collapse: collapse;
+  margin: 25px 0;
+  font-size: 0.9em;
+  max-width: 600px;
+  font-family: sans-serif;
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.15);
 }
 
 thead tr {
-    background-color: #009879;
-    color: #ffffff;
-    text-align: left;
+  background-color: #009879;
+  color: #ffffff;
+  text-align: left;
 }
 
 th, td {
