@@ -63,7 +63,7 @@ form.onsubmit = e => {
                 placeCell.textContent = result.place;
                 nameCell.textContent = result.name;
                 nameCell.classList.add("text-break");
-                scoreCell.textContent = result.score;
+                scoreCell.textContent = result.score.toFixed(2);
                 if (result.score < result.points) {
                     scoreCell.classList.add("personal-best");
                 }
