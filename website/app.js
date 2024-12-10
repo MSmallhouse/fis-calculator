@@ -62,8 +62,11 @@ form.onsubmit = e => {
 
                 placeCell.textContent = result.place;
                 nameCell.textContent = result.name;
-                nameCell.classList.add("text-break")
+                nameCell.classList.add("text-break");
                 scoreCell.textContent = result.score;
+                if (result.score < result.points) {
+                    scoreCell.classList.add("personal-best");
+                }
                 row.append(placeCell);
                 row.append(nameCell);
                 row.append(scoreCell);

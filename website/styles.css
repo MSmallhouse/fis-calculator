@@ -31,8 +31,8 @@ h1 {
 }
 
 #loader {
-  border: 16px solid #f3f3f3; /* Light grey */
-  border-top: 16px solid #3498db; /* Blue */
+  border: 16px solid #f3f3f3;
+  border-top: 16px solid #016876;
   border-radius: 50%;
   width: 60px;
   height: 60px;
@@ -74,6 +74,12 @@ tbody tr:n-th-of-type(even) {
 
 tbody tr:last-of-type {
   border-bottom: 2px solid #009879;
+}
+
+td.personal-best {
+  background-color: #009879;
+  font-weight: 600;
+  color: white;
 }
 
 form input, form select, form button {
