@@ -35,7 +35,12 @@ class Race:
         connect_to_database(self)
         scrape_results(self)
 
-        starting_racers_points = [competitor.fis_points for competitor in self.competitors]
+        starting_racers_points = []
+        for competitor in self.competitors:
+            if competitor.fis_points == -1:
+                continue
+
+            starting_racers_points.append(competitor.fis_points)
         self.calculate_penalty(starting_racers_points)
         self.assign_scores()
         return
@@ -99,14 +104,14 @@ def get_race_points(competitor, race):
     return round(race_points, 2)
 
 def handler(event, context):
-    url = event["queryStringParameters"]["url"]
-    min_penalty = event["queryStringParameters"]["min-penalty"]
-    race_event = event["queryStringParameters"]["event"]
-    race = Race(url, min_penalty, race_event)
-    #URL = "https://vola.ussalivetiming.com/race/usa-vt-stowe-mountain-resort--spruce-peak-womens-eastern-cup_31816.html"
-    #MIN_PENALTY = "23"
-    #EVENT = "GSpoints"
-    #race = Race(URL, MIN_PENALTY, EVENT)
+    #url = event["queryStringParameters"]["url"]
+    #min_penalty = event["queryStringParameters"]["min-penalty"]
+    #race_event = event["queryStringParameters"]["event"]
+    #race = Race(url, min_penalty, race_event)
+    URL = "https://vola.ussalivetiming.com/race/usa-me-sunday-river-womens-open-fis_37114.html"
+    MIN_PENALTY = "23"
+    EVENT = "SLpoints"
+    race = Race(URL, MIN_PENALTY, EVENT)
 
     race.get_points()
     points_not_found = ""
@@ -115,6 +120,10 @@ def handler(event, context):
         # points = 1000 indicates not found in database
         #
         if competitor.fis_points == 1000:
+            # fix for Cole since he signed up late
+            if competitor.full_name == "PALCHAK, Cole":
+                continue
+
             points_not_found += competitor.full_name + ' '
         # score = -1 indicates did not finish or did not start
         if competitor.score != -1:
@@ -123,8 +132,10 @@ def handler(event, context):
     output = [
         {
             "place": i+1,
+            "place": "" if i > 0 and competitor.time == finishers[i-1].time else i+1,
             "name": competitor.full_name,
-            "score": competitor.score
+            "score": competitor.score,
+            "points": competitor.fis_points
         }
         for i, competitor in enumerate(finishers)
     ]

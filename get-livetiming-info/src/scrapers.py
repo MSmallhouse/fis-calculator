@@ -161,7 +161,7 @@ def vola_scraper(race):
                     continue
                 if (field['grid'], field['col']) in valid_fields:
                     names_and_times.append(field)
-                    print(f"grid: {field['grid']}  {field['value']}")
+                    #print(f"grid: {field['grid']}  {field['value']}")
 
             if first_last_names_separate:
                 names_and_times = combine_first_last_name_fields(names_and_times)
@@ -238,6 +238,7 @@ def vola_scraper(race):
 
             full_name = add_comma_to_full_name(full_name)
             if full_name in competitor_ids:
+                #print(f'time for: {full_name} : {time}')
                 id = competitor_ids[full_name]
                 race.competitors[id].time = time_to_float(time)
                 race.winning_time = min(race.winning_time, race.competitors[id].time)
@@ -315,7 +316,7 @@ def time_to_float(time):
     time = re.sub(r'\s*\(\d+\)$', '', time.strip())
 
     # calculate time in seconds, but only for those who finished
-    if not time or time in TIMES_AS_LETTERS:
+    if not time or time in TIMES_AS_LETTERS or not re.match(r'[0-9:]', time):
         return 9999
     # edge case for times under a minute
     elif ":" not in time:
