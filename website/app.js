@@ -48,8 +48,9 @@ form.onsubmit = e => {
             const tableBody = document.createElement("tbody");
             const headerRow = document.createElement("tr");
             headerRow.innerHTML = `
-                <th>Place</th>
+                <th>Pl</th>
                 <th>Name</th>
+                <th>Points</th>
                 <th>Score</th>`;
             tableHead.append(headerRow);
             table.append(tableHead);
@@ -58,17 +59,22 @@ form.onsubmit = e => {
                 const row = document.createElement("tr");
                 const placeCell = document.createElement("td");
                 const nameCell = document.createElement("td");
+                const pointsCell = document.createElement("td");
                 const scoreCell = document.createElement("td");
 
                 placeCell.textContent = result.place;
                 nameCell.textContent = result.name;
                 nameCell.classList.add("text-break");
+                pointsCell.textContent = result.points.toFixed(2);
+                pointsCell.classList.add("text-center");
                 scoreCell.textContent = result.score.toFixed(2);
+                scoreCell.classList.add("text-center");
                 if (result.score < result.points) {
                     scoreCell.classList.add("personal-best");
                 }
                 row.append(placeCell);
                 row.append(nameCell);
+                row.append(pointsCell);
                 row.append(scoreCell);
                 tableBody.append(row);
             });
