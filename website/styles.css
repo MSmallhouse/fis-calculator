@@ -142,8 +142,8 @@ select {
 
 .contact {
   background-color: #016876;
-  padding-top: 4px;
-  padding-bottom: 4px;
+  padding-top: 10px;
+  padding-bottom: 10px;
   width: 100%;
   display: flex;
   flex-direction: column;
