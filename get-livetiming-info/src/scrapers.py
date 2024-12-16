@@ -302,7 +302,10 @@ def livetiming_scraper(race):
 
         # filter for did not finish, did not start, or disqualified
         if ("tt=" not in starter[-1] or
-            "".join(starter) in TIMES_AS_LETTERS):
+            "".join(starter[1:]) in TIMES_AS_LETTERS or
+            "DQ" in "".join(starter[1:]) or
+            "DNF" in "".join(starter[1:]) or
+            "DNS" in "".join(starter[1:])): #edge case, sometimes time is listed as DQg35 for example, or sometimes single run time shown for combined time
             competitor.time = 9999
         else:
             competitor.time = time_to_float(starter[-1][3:])
