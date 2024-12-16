@@ -104,14 +104,14 @@ def get_race_points(competitor, race):
     return round(race_points, 2)
 
 def handler(event, context):
-    #url = event["queryStringParameters"]["url"]
-    #min_penalty = event["queryStringParameters"]["min-penalty"]
-    #race_event = event["queryStringParameters"]["event"]
-    #race = Race(url, min_penalty, race_event)
-    URL = "https://vola.ussalivetiming.com/race/usa-me-sunday-river-womens-open-fis_37114.html"
-    MIN_PENALTY = "23"
-    EVENT = "SLpoints"
-    race = Race(URL, MIN_PENALTY, EVENT)
+    url = event["queryStringParameters"]["url"]
+    min_penalty = event["queryStringParameters"]["min-penalty"]
+    race_event = event["queryStringParameters"]["event"]
+    race = Race(url, min_penalty, race_event)
+    #URL = "https://www.live-timing.com/race2.php?r=266905"
+    #MIN_PENALTY = "23"
+    #EVENT = "SLpoints"
+    #race = Race(URL, MIN_PENALTY, EVENT)
 
     race.get_points()
     points_not_found = ""
@@ -120,9 +120,6 @@ def handler(event, context):
         # points = 1000 indicates not found in database
         #
         if competitor.fis_points == 1000:
-            # fix for Cole since he signed up late
-            if competitor.full_name == "PALCHAK, Cole":
-                continue
 
             points_not_found += competitor.full_name + ' '
         # score = -1 indicates did not finish or did not start
