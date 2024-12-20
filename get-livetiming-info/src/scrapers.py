@@ -6,6 +6,7 @@ TIMES_AS_LETTERS = {"DNF", "DNS", "DSQ", "DQ", "Did Not Finish", "Did Not Start"
 class Competitor:
     def __init__(self, full_name):
         self.full_name = full_name
+        self.temp_full_name = ""
         self.first_name = ""
         self.last_name = ""
         self.time = 9999
@@ -97,7 +98,6 @@ def vola_scraper(race):
         return transformed_fields
 
     def extract_startlist():
-        #TODO: make this work...
         # sometimes names are given as full names, sometimes they are given separated by first/last
         first_last_names_separate = False
         valid_fields = set()
@@ -183,6 +183,11 @@ def vola_scraper(race):
         split_idx -= 1
         return name[:split_idx-1] + ", " + name[split_idx:]
         
+    def generate_ussa_competitor_name(full_name):
+        # since ussa doesn't separate out first and last names nicely
+        # combine first/last names, remove non a-z characters, and order alphabetically
+        return ''.join(sorted(re.sub('[^a-z]', '', full_name.lower())))
+
 
     def initialize_starting_racers():
         # TODO: FIX THIS NEXT
@@ -198,11 +203,18 @@ def vola_scraper(race):
             if is_numeric_field(names_and_start_order[i]['value']):
                 continue
 
-            full_name = add_comma_to_full_name(names_and_start_order[i]['value'])
+            full_name = ""
+            temp_full_name = ""
+            if race.is_fis_race:
+                full_name = add_comma_to_full_name(names_and_start_order[i]['value'])
+            else:
+                temp_full_name = names_and_start_order[i]['value']
+                full_name = generate_ussa_competitor_name(names_and_start_order[i]['value'])
             if full_name in racers:
                 continue
 
             competitor = Competitor(full_name)
+            competitor.temp_full_name = temp_full_name
             race.competitors.append(competitor)
             racers.add(full_name)
     
@@ -236,7 +248,11 @@ def vola_scraper(race):
             if "DNS" in time or "Did Not Start" in time:
                 continue
 
-            full_name = add_comma_to_full_name(full_name)
+            if race.is_fis_race:
+                full_name = add_comma_to_full_name(full_name)
+            else:
+                full_name = generate_ussa_competitor_name(full_name)
+
             if full_name in competitor_ids:
                 #print(f'time for: {full_name} : {time}')
                 id = competitor_ids[full_name]
