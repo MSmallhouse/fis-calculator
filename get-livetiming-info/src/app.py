@@ -45,7 +45,8 @@ class Race:
         self.penalty = 0
 
     def get_points(self):
-        connect_to_database(self)
+        if "live-timing" not in self.url: # don't need to connect to database for races on livetiming
+            connect_to_database(self)
         scrape_results(self)
 
         starting_racers_points = []
@@ -139,14 +140,7 @@ def handler(event, context):
     is_fis_race = True
     race_event = event["queryStringParameters"]["event"]
 
-    logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
-    logger.info(f'min_penalty = {min_penalty}')
-    logger.info(f'min_penalty type = {type(min_penalty)}')
-
     if min_penalty < "0":
-        logger.info(f"ussa race detected")
-        logger
         is_fis_race = False
         min_penalty = "15"
     race = Race(url, min_penalty, race_event, is_fis_race)
