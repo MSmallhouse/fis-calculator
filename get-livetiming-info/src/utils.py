@@ -34,17 +34,6 @@ def connect_to_database(race):
         race.logger.error(e)
         sys.exit()
 
-    # make database connection
-    #try:
-    #    race.connection = pymysql.connect(host=race.ENDPOINT, user=race.USERNAME,
-    #                                    passwd=race.PASSWORD,db=race.DATABASE_NAME,
-    #                                    connect_timeout=5,
-    #                                    cursorclass=pymysql.cursors.DictCursor)
-    #except pymysql.MySQLError as e:
-    #    race.logger.error("ERROR: Unexpected error: Could not connect to MySQL instance.")
-    #    race.logger.error(e)
-    #    sys.exit()
-    #race.logger.info("SUCCESS: Connection to RDS for MySQL instance succeeded")
     return
 
 # Initialize selenium, used as webscraper to get names and race times
