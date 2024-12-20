@@ -142,12 +142,13 @@ def handler(event, context):
 
     if min_penalty < "0":
         is_fis_race = False
-        min_penalty = "15"
+        min_penalty = "40"
     race = Race(url, min_penalty, race_event, is_fis_race)
-    #URL = "https://www.live-timing.com/race2.php?r=266948"
+    #URL = "https://www.live-timing.com/race2.php?r=267000"
     #MIN_PENALTY = "23"
-    #EVENT = "SLpoints"
-    #race = Race(URL, MIN_PENALTY, EVENT, is_fis_race=True)
+    #EVENT = "GSpoints"
+    #is_fis_race = False
+    #race = Race(URL, MIN_PENALTY, EVENT, is_fis_race)
 
     race.get_points()
     points_not_found = ""
@@ -156,8 +157,11 @@ def handler(event, context):
         # points = 1000 indicates not found in databas
         #
         if competitor.fis_points == 1000:
-
             points_not_found += competitor.full_name + ' '
+
+        # vola ussa races require full name to be scrambled, restore here for nice printing
+        if competitor.temp_full_name:
+            competitor.full_name = competitor.temp_full_name
         # score = -1 indicates did not finish or did not start
         if competitor.score != -1:
             finishers.append(competitor)
