@@ -247,25 +247,26 @@ def vola_scraper(race):
     add_times_to_racers()
 
 def livetiming_scraper(race):
-    #TODO if not speed race, calculate total time by adding run 1 and run 2
-    # sometimes total time displays incorrectly
-    
     # request URL to get raw data from livetiming
     URL = "https://www.live-timing.com/includes/aj_race." + race.url.split(".")[-1]
 
     # only get first names, run time
     # get both runs for tech races
     def is_valid_field_tech_race(field):
+        # do this to grab fis points if fis race, ussa points if ussa race
+        points_string = "fp=" if race.is_fis_race else "up="
         return (field.startswith("m=") or
-                field.startswith("fp=") or
+                field.startswith(f"{points_string}") or
                 field.startswith("r1") or
                 field.startswith("r2") or
                 field.startswith("tt="))
 
     # speed races only have 1 run
     def is_valid_field_speed_race(field):
+        # do this to grab fis points if fis race, ussa points if ussa race
+        points_string = "fp=" if race.is_fis_race else "up="
         return (field.startswith("m=") or
-                field.startswith("fp=") or
+                field.startswith(f"{points_string}") or
                 field.startswith("r1") or
                 field.startswith("tt="))
 
