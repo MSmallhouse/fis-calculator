@@ -1,16 +1,33 @@
 from selenium.webdriver.common.by import By
 import json
+import logging
 
 # imports from user-defined modules
 from utils import connect_to_database
 from utils import scrape_results
 
+FIS_EVENT_MAXIMUMS = {
+    "SLpoints": 165,
+    "GSpoints": 220,
+    "SGpoints": 270,
+    "DHpoints": 330,
+    "ACpoints": 270
+}
+USSA_EVENT_MAXIMUMS = {
+    "SLpoints": 360,
+    "GSpoints": 530,
+    "SGpoints": 660,
+    "DHpoints": 820,
+    "ACpoints": 660
+}
+
 class Race:
-    def __init__(self, url, min_penalty, event):
+    def __init__(self, url, min_penalty, event, is_fis_race):
         # race information variables
         self.url = url
         self.min_penalty = int(min_penalty)
         self.event = event
+        self.is_fis_race = is_fis_race
         if event == "SLpoints":
             self.event_multiplier = 730
         if event == "GSpoints":
@@ -19,17 +36,13 @@ class Race:
             self.event_multiplier = 1190
         if event == "DHpoints":
             self.event_multiplier = 1250
+        if event == "ACpoints":
+            self.event_multiplier = 1360
         
         # variabes for calculating penalty
         self.competitors = []
         self.winning_time = 9999
         self.penalty = 0
-
-        # database configuration values
-        self.ENDPOINT = "fis-points-database.cby1setpagel.us-east-2.rds.amazonaws.com"
-        self.USERNAME = "admin"
-        self.PASSWORD = "password"
-        self.DATABASE_NAME = "fis_points"
 
     def get_points(self):
         connect_to_database(self)
@@ -72,16 +85,33 @@ class Race:
         A = 0
         C = 0
         for competitor in top_ten_sorted_by_points[:5]:
-            A += competitor.fis_points
+            # edge cases for those who finish with sufficiently high points:
+            if self.is_fis_race and competitor.fis_points >= FIS_EVENT_MAXIMUMS[self.event]:
+                A += FIS_EVENT_MAXIMUMS[self.event]
+            elif not self.is_fis_race and competitor.fis_points >= USSA_EVENT_MAXIMUMS[self.event]:
+                A += USSA_EVENT_MAXIMUMS[self.event]
+            # normal case:
+            else:
+                A += competitor.fis_points
             C += get_race_points(competitor, self)
         return A, C
-
+    
     def get_B(self, starting_racers_points):
         #TODO: get top 5 out of seed
         # make sure to check DNS - time == 9999
         # B = top 5 points at start
         starting_racers_points.sort()
-        return sum(starting_racers_points[:5])
+        B = 0
+        for points in starting_racers_points[:5]:
+            # edge cases for those who finish with sufficiently high points:
+            if self.is_fis_race and points >= FIS_EVENT_MAXIMUMS[self.event]:
+                B += FIS_EVENT_MAXIMUMS[self.event]
+            elif not self.is_fis_race and points >= USSA_EVENT_MAXIMUMS[self.event]:
+                B += USSA_EVENT_MAXIMUMS[self.event]
+            # normal case:
+            else:
+                B += points
+        return B
 
     def assign_scores(self):
         for competitor in self.competitors:
@@ -106,18 +136,30 @@ def get_race_points(competitor, race):
 def handler(event, context):
     url = event["queryStringParameters"]["url"]
     min_penalty = event["queryStringParameters"]["min-penalty"]
+    is_fis_race = True
     race_event = event["queryStringParameters"]["event"]
-    race = Race(url, min_penalty, race_event)
-    #URL = "https://www.live-timing.com/race2.php?r=266905"
+
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    logger.info(f'min_penalty = {min_penalty}')
+    logger.info(f'min_penalty type = {type(min_penalty)}')
+
+    if min_penalty < "0":
+        logger.info(f"ussa race detected")
+        logger
+        is_fis_race = False
+        min_penalty = "15"
+    race = Race(url, min_penalty, race_event, is_fis_race)
+    #URL = "https://www.live-timing.com/race2.php?r=266948"
     #MIN_PENALTY = "23"
     #EVENT = "SLpoints"
-    #race = Race(URL, MIN_PENALTY, EVENT)
+    #race = Race(URL, MIN_PENALTY, EVENT, is_fis_race=True)
 
     race.get_points()
     points_not_found = ""
     finishers = []
     for competitor in race.competitors:
-        # points = 1000 indicates not found in database
+        # points = 1000 indicates not found in databas
         #
         if competitor.fis_points == 1000:
 
