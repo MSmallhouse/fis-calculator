@@ -105,11 +105,12 @@ function applyStyling() {
 
 function toggleHeaderOnScroll() {
   const header = document.querySelector('.contact');
+  const threshold = 10; // scroll up was being detected a little too easily on mobile, add this to make sure they're really scrolling up
   let lastScroll = 0;
 
   window.addEventListener('scroll', function () {
     let scroll = window.scrollY || this.document.documentElement.scrollTop;
-    if(scroll == lastScroll) {
+    if(Math.abs(scroll-lastScroll) < threshold) {
       return;
     }
     
