@@ -117,7 +117,7 @@ function toggleHeaderOnScroll() {
     if(scroll > lastScroll) { // hide header on scroll down
       header.style.top = '-120px';
     } else { // show header on scroll up
-      header.style.top = '0';
+      header.style.top = '-1px';
     }
     lastScroll = scroll;
   });
