@@ -107,11 +107,13 @@ function toggleHeaderOnScroll() {
   const header = document.querySelector('.contact');
   let lastScroll = 0;
 
-  window.addEventListener('wheel', function () {
+  window.addEventListener('scroll', function () {
     let scroll = window.scrollY || this.document.documentElement.scrollTop;
     if(scroll == lastScroll) {
       return;
-    } else if(scroll > lastScroll) { // hide header on scroll down
+    }
+    
+    if(scroll > lastScroll) { // hide header on scroll down
       header.style.top = '-120px';
     } else { // show header on scroll up
       header.style.top = '0';
