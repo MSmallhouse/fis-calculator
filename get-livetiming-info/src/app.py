@@ -45,6 +45,9 @@ class Race:
         self.penalty = 0
 
     def get_points(self):
+        self.logger = logging.getLogger()
+        self.logger.setLevel(logging.INFO)
+        self.logger.info(f"URL PASSED: {self.url}")
         if "live-timing" not in self.url: # don't need to connect to database for races on livetiming
             connect_to_database(self)
         scrape_results(self)
@@ -135,52 +138,57 @@ def get_race_points(competitor, race):
     return round(race_points, 2)
 
 def handler(event, context):
-    url = event["queryStringParameters"]["url"]
-    min_penalty = event["queryStringParameters"]["min-penalty"]
-    is_fis_race = True
-    race_event = event["queryStringParameters"]["event"]
+    try:
+        logger = logging.getLogger()
+        logger.setLevel(logging.INFO)
 
-    if min_penalty < "0":
-        is_fis_race = False
-        min_penalty = "40"
-    race = Race(url, min_penalty, race_event, is_fis_race)
-    #URL = "https://www.live-timing.com/race2.php?r=267000"
-    #MIN_PENALTY = "23"
-    #EVENT = "GSpoints"
-    #is_fis_race = False
-    #race = Race(URL, MIN_PENALTY, EVENT, is_fis_race)
+        url = event["queryStringParameters"]["url"]
+        min_penalty = event["queryStringParameters"]["min-penalty"]
+        is_fis_race = True
+        race_event = event["queryStringParameters"]["event"]
 
-    race.get_points()
-    points_not_found = ""
-    finishers = []
-    for competitor in race.competitors:
-        # points = 1000 indicates not found in databas
-        #
-        if competitor.fis_points == 1000:
-            points_not_found += competitor.full_name + ' '
+        if min_penalty < "0":
+            is_fis_race = False
+            min_penalty = "40"
+        race = Race(url, min_penalty, race_event, is_fis_race)
+        #URL = "https://vola.ussalivetiming.com/race/usa-nh-waterville-valley-mens-njr_37279.html"
+        #MIN_PENALTY = "23"
+        #EVENT = "GSpoints"
+        #is_fis_race = False
+        #race = Race(URL, MIN_PENALTY, EVENT, is_fis_race)
 
-        # vola ussa races require full name to be scrambled, restore here for nice printing
-        if competitor.temp_full_name:
-            competitor.full_name = competitor.temp_full_name
-        # score = -1 indicates did not finish or did not start
-        if competitor.score != -1:
-            finishers.append(competitor)
+        race.get_points()
+        points_not_found = ""
+        finishers = []
+        for competitor in race.competitors:
+            # points = 1000 indicates not found in databas
+            #
+            if competitor.fis_points == 1000:
+                points_not_found += competitor.full_name + ' '
 
-    output = [
-        {
-            "place": i+1,
-            "place": "" if i > 0 and competitor.time == finishers[i-1].time else i+1,
-            "name": competitor.full_name,
-            "score": competitor.score,
-            "points": competitor.fis_points
+            # vola ussa races require full name to be scrambled, restore here for nice printing
+            if competitor.temp_full_name:
+                competitor.full_name = competitor.temp_full_name
+            # score = -1 indicates did not finish or did not start
+            if competitor.score != -1:
+                finishers.append(competitor)
+
+        output = [
+            {
+                "place": i+1,
+                "place": "" if i > 0 and competitor.time == finishers[i-1].time else i+1,
+                "name": competitor.full_name,
+                "score": competitor.score,
+                "points": competitor.fis_points
+            }
+            for i, competitor in enumerate(finishers)
+        ]
+        return_data = {
+            "results": output,
+            "notFound": points_not_found
         }
-        for i, competitor in enumerate(finishers)
-    ]
-    return_data = {
-        "results": output,
-        "notFound": points_not_found
-    }
-    
+    except Exception as e:
+        logger.error(f"ERROR: {e}")
     try:
         return {
             "statusCode": 200,

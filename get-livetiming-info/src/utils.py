@@ -24,9 +24,6 @@ NAME_ERROR_FISCODES = {
 NAME_ERROR_USSA_CODES = {}
 
 def connect_to_database(race):
-    race.logger = logging.getLogger()
-    race.logger.setLevel(logging.INFO)
-
     table_name = "points_list_dynamo_db" if race.is_fis_race else "ussa_points_list"
 
     try:
@@ -122,7 +119,10 @@ def fis_add_points_to_competitors(race, points_df):
                     race.logger.error(f"ERROR CORRECTION: Racer {competitor.first_name}, {competitor.last_name}'s assigned name: {matching_row.iloc[0]['Competitorname']}")
         
         if matching_row.empty:
-            race.logger.error(f"ERROR: Racer {competitor.first_name}, {competitor.last_name}'s points not found in database")
+            if race.is_fis_race:
+                race.logger.error(f"ERROR: Racer {competitor.first_name}, {competitor.last_name}'s points not found in database")
+            else:
+                race.logger.error(f"ERROR: Racer {competitor.temp_full_name}'s points not found in database")
             # early exit if manual fix hasn't been given for this person that can't be found
             if competitor.full_name not in NAME_ERROR_FISCODES:
                 continue
