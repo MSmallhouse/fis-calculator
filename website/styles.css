@@ -151,7 +151,7 @@ select {
   padding-bottom: 10px;
   width: 100%;
   position: sticky;
-  top: 0;
+  top: -1px;
   transition: top 0.3s ease-out;
   z-index: 10;
   display: flex;
