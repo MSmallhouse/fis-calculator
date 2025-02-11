@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', function() {
     formSubmitBehavior();
     applyStyling();
-    toggleHeaderOnScroll();
+    //toggleHeaderOnScroll();
 });
 
 function formSubmitBehavior() {
