@@ -71,7 +71,7 @@ th, td {
 
 @media screen and (max-width: 400px) {
   * {
-    scroll-margin-top: 93px;
+    scroll-margin-top: 94px;
   }
   th, td {
     padding: 6px;
