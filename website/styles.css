@@ -210,5 +210,6 @@ select {
   word-break: break-word;
 }
 
-.contact {
+.container p {
+  text-align: center;
 }
