@@ -1,8 +1,17 @@
 document.addEventListener('DOMContentLoaded', function() {
+    let currentDate = new Date();
+    currentDate = formatDatestring(currentDate);
+
     formSubmitBehavior();
+    getFisAppRaces(currentDate);
+    datePickerInit();
     applyStyling();
     //toggleHeaderOnScroll();
 });
+
+function formatDatestring(date) {
+    return date.toISOString().split('T')[0];
+}
 
 function formSubmitBehavior() {
     const lambdaURL = "https://imvf3e6jot4nih4i5th43endj40jbfqa.lambda-url.us-east-2.on.aws/";
@@ -88,9 +97,141 @@ function formSubmitBehavior() {
 
 }
 
+function getFisAppRaces(dateString) {
+    const raceCategoryToPenalty = {
+        'OWG': '0',
+        'WC': '0',
+        'WSC': '0',
+        'COM': '0',
+        'WQUA': '0',
+        'ANC': '15',
+        'EC': '15',
+        'ECOM': '15',
+        'FEC': '15',
+        'NAC': '15',
+        'SAC': '15',
+        'UVS': '15',
+        'WJC': '15',
+        'EQUA': '23',
+        'NC': '20',
+        'AWG': '23',
+        'CISM': '23',
+        'CIT': '40',
+        'CITWC': '40',
+        'CORP': '23',
+        'EYOF': '23',
+        'FIS': '23',
+        'FQUA': '23',
+        'JUN': '23',
+        'NJC': '23',
+        'NJR': '23',
+        'UNI': '23',
+        'YOG': '23',
+        'ENL': '60',
+        'TRA': '0',
+    };
+    const eventNameToCategory = {
+        'Slalom': 'SLpoints',
+        'Giant Slalom': 'GSpoints',
+        'Super G': 'SGpoints',
+        'Downhill': 'DHpoints',
+        'Downhill Training': 'DHpoints',
+    }
+    const fisAppTableBody = document.querySelector('.fis-app-table-body');
+    fisAppTableBody.innerHTML = "";
+
+    fetch('https://www.fis-ski.com/DB/alpine-skiing/live.html')
+        .then(response => response.text())
+        .then(html => {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            const raceRows = doc.querySelectorAll('.g-row');
+
+            raceRows.forEach(row => {
+                const splitRowItems = row.querySelectorAll('.split-row__item');
+                const codex = splitRowItems[1].textContent.trim();
+                const location = splitRowItems[2].textContent.trim();
+                const displayDate = row.querySelector('.timezone-date').textContent.trim();
+                const raceDate = row.querySelector('.timezone-date').getAttribute('data-date');
+                const countryCode = row.querySelector('.country__name-short').textContent;
+                const raceCategory = splitRowItems[4].textContent.trim();
+                const event = splitRowItems[5].textContent.trim();
+                const gender = row.querySelector('.gender__item').textContent;
+
+                const live = row.querySelector('.live__content');
+                let isLive = ''
+                if(live) {
+                    isLive = live.textContent === 'live' ? 'Y' : 'N';
+                }
+
+                if(raceDate === dateString) {
+                    const tableRow = document.createElement('tr');
+                    tableRow.className = 'fis-table-row'
+                    tableRow.setAttribute('codex', codex);
+                    tableRow.setAttribute('category', raceCategoryToPenalty[raceCategory]);
+                    tableRow.setAttribute('event', eventNameToCategory[event]);
+                    tableRow.innerHTML = `
+                        <td>${countryCode}<br>${location}</td>
+                        <td>${event}</td>
+                        <td>${gender}</td>
+                    `;
+                    fisAppTableBody.appendChild(tableRow);
+                }
+            });
+            const tableRows = document.querySelectorAll('.fis-table-row');
+            const url = document.getElementById("urlInput");
+            const eventSelector = document.getElementById("eventSelector");
+            const minPenalty = document.getElementById("minPenalty");
+            const submitBtn = document.getElementById("submitBtn");
+            const form = document.getElementById("userInfo");
+
+            tableRows.forEach(row => {
+                row.addEventListener("click", () => {
+                    url.value = row.getAttribute('codex');
+                    eventSelector.value = row.getAttribute('event');
+                    minPenalty.value = row.getAttribute('category');
+                    submitBtn.click();
+                    form.scrollIntoView({behavior: 'smooth'});
+                });
+            });
+        });
+}
+
+function datePickerInit() {
+    const currentDateSpan = document.getElementById('current-date');
+    const prevDayButton = document.getElementById('prev-day');
+    const nextDayButton = document.getElementById('next-day');
+
+    let currentDate = new Date();
+
+    function updateDateDisplay() {
+      currentDateSpan.textContent = currentDate.toLocaleDateString('en-GB', {day: '2-digit', month: 'short', year: 'numeric'});
+    }
+
+    function changeDate(days) {
+      currentDate.setDate(currentDate.getDate() + days);
+      updateDateDisplay();
+      getFisAppRaces( formatDatestring(currentDate) );
+    }
+
+    prevDayButton.addEventListener('click', () => {
+      changeDate(-1);
+    });
+
+    nextDayButton.addEventListener('click', () => {
+      changeDate(1);
+    });
+
+    updateDateDisplay();
+}
+
 function applyStyling() {
     const select = document.querySelectorAll("select");
     const submitBtn = document.getElementById("submitBtn");
+    const collapsibleRaces = document.querySelector('.collapsible-races');
+    const collapsibleArrow = document.getElementById('collapsible-arrow');
+    const fisAppTable = document.querySelector('.fis-app-table');
+    const datePicker = document.getElementById('date-picker-container');
 
     select.forEach(selectElement => {
         selectElement.onchange = function() {
@@ -101,6 +242,15 @@ function applyStyling() {
     submitBtn.addEventListener("click", () => {
         loader.style.display = "block";
     })
+
+    collapsibleArrow.style.transition = 'transform 0.2s';
+    collapsibleRaces.addEventListener("click", () => {
+        const isHidden = fisAppTable.style.display === 'none';
+
+        collapsibleArrow.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
+        fisAppTable.style.display = isHidden ? 'block' : 'none';
+        datePicker.style.display = isHidden ? 'flex' : 'none';
+    });
 }
 
 function toggleHeaderOnScroll() {
@@ -108,8 +258,7 @@ function toggleHeaderOnScroll() {
   const threshold = 10; // scroll up was being detected a little too easily on mobile, add this to make sure they're really scrolling up
   let lastScroll = 0;
 
-  window.addEventListener('scroll', function () {
-    let scroll = window.scrollY || this.document.documentElement.scrollTop;
+  window.addEventListener('scroll', function () { let scroll = window.scrollY || this.document.documentElement.scrollTop;
     if(Math.abs(scroll-lastScroll) < threshold) {
       return;
     }
