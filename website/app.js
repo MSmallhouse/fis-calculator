@@ -138,8 +138,9 @@ function getFisAppRaces(dateString) {
         'Downhill Training': 'DHpoints',
     }
     const fisAppTableBody = document.querySelector('.fis-app-table-body');
-    fisAppTableBody.innerHTML = "";
+    const tableLoader = document.getElementById('table-loader');
 
+    fisAppTableBody.innerHTML = "";
     fetch('https://www.fis-ski.com/DB/alpine-skiing/live.html')
         .then(response => response.text())
         .then(html => {
@@ -147,6 +148,7 @@ function getFisAppRaces(dateString) {
             const doc = parser.parseFromString(html, 'text/html');
             const raceRows = doc.querySelectorAll('.g-row');
 
+            tableLoader.style.display = 'none';
             raceRows.forEach(row => {
                 const splitRowItems = row.querySelectorAll('.split-row__item');
                 const codex = splitRowItems[1].textContent.trim();
@@ -209,9 +211,12 @@ function datePickerInit() {
     }
 
     function changeDate(days) {
-      currentDate.setDate(currentDate.getDate() + days);
-      updateDateDisplay();
-      getFisAppRaces( formatDatestring(currentDate) );
+        const tableLoader = document.getElementById('table-loader');
+        tableLoader.style.display = 'block';
+
+        currentDate.setDate(currentDate.getDate() + days);
+        updateDateDisplay();
+        getFisAppRaces( formatDatestring(currentDate) );
     }
 
     prevDayButton.addEventListener('click', () => {
