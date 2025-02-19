@@ -98,9 +98,10 @@ function formSubmitBehavior() {
 }
 
 function getFisAppRaces(dateString) {
+    newDate = new Date();
     const container = document.querySelector('.container');
     let date = document.createElement("p");
-    date.textContent = dateString;
+    date.textContent = newDate;
     container.appendChild(date);
     const raceCategoryToPenalty = {
         'OWG': '0',
@@ -208,7 +209,7 @@ function datePickerInit() {
     const prevDayButton = document.getElementById('prev-day');
     const nextDayButton = document.getElementById('next-day');
 
-    let currentDate = new Date();
+    let currentDate = new Date().toLocaleDateString;
 
     function updateDateDisplay() {
       currentDateSpan.textContent = currentDate.toLocaleDateString('en-GB', {day: '2-digit', month: 'short', year: 'numeric'});
