@@ -98,6 +98,10 @@ function formSubmitBehavior() {
 }
 
 function getFisAppRaces(dateString) {
+    const container = document.querySelector('.container');
+    let date = document.createElement("p");
+    date.textContent = dateString;
+    container.appendChild(date);
     const raceCategoryToPenalty = {
         'OWG': '0',
         'WC': '0',
