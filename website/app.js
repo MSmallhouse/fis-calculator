@@ -10,7 +10,10 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function formatDatestring(date) {
-    return date.toISOString().split('T')[0];
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0') // months are zero-indexed
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
 }
 
 function formSubmitBehavior() {
@@ -98,7 +101,7 @@ function formSubmitBehavior() {
 }
 
 function getFisAppRaces(dateString) {
-    newDate = new Date();
+    newDate = new Date()
     const container = document.querySelector('.container');
     let date = document.createElement("p");
     date.textContent = newDate;
@@ -209,10 +212,11 @@ function datePickerInit() {
     const prevDayButton = document.getElementById('prev-day');
     const nextDayButton = document.getElementById('next-day');
 
-    let currentDate = new Date().toLocaleDateString;
+    let currentDate = new Date();
 
     function updateDateDisplay() {
-      currentDateSpan.textContent = currentDate.toLocaleDateString('en-GB', {day: '2-digit', month: 'short', year: 'numeric'});
+        //currentDateSpan.textContent = currentDate.toLocaleDateString('en-GB', {day: '2-digit', month: 'short', year: 'numeric'});
+        currentDateSpan.textContent = currentDate.toLocaleDateString('en-GB', {day: '2-digit', month: 'short', year: 'numeric'});
     }
 
     function changeDate(days) {
