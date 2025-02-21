@@ -68,9 +68,9 @@
     <p style="font-weight: 600">OR</p>
     <p style="margin-top: 0">Fill out the form for livetiming and vola livetiming races</p>
     <form id="userInfo">
-      <input type="text" placeholder="paste codex or livetiming url" name="url" id="urlInput" style="margin-top: 0;">
-      <select name="minPenalty" id="minPenalty">
-        <option value="null">level of race</option>
+      <input type="text" placeholder="paste codex or livetiming url" name="url" id="urlInput" style="margin-top: 0;" required>
+      <select name="minPenalty" id="minPenalty" required>
+        <option value="">level of race</option>
         <option value="-1">USSA</option>
         <option value="23">Open FIS</option>
         <option value="20">National Championship</option>
@@ -79,8 +79,8 @@
         <option value="0">World Cup</option>
         <option value="40">Citizen</option>
       </select>
-      <select name="event" id ="eventSelector">
-        <option value="null">event</option>
+      <select name="event" id ="eventSelector" required>
+        <option value="">event</option>
         <option value="SLpoints">SL</option>
         <option value="GSpoints">GS</option>
         <option value="SGpoints">SG</option>

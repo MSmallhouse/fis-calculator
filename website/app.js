@@ -6,6 +6,7 @@ document.addEventListener('DOMContentLoaded', function() {
     getFisAppRaces(currentDate);
     datePickerInit();
     applyStyling();
+    //validateForm();
     //toggleHeaderOnScroll();
 });
 
@@ -30,6 +31,13 @@ function formSubmitBehavior() {
 
     form.onsubmit = e => {
         e.preventDefault();
+
+        // make sure form is completed
+        if (!url.value.trim() || !minPenalty.value || !eventSelector.value) {
+            return;
+        }
+
+        loader.style.display = "block";
         results.innerHTML = "";
         // attach form responses to url as query string
         const requestURL = `${lambdaURL}?url=${encodeURIComponent(url.value)}
@@ -165,11 +173,11 @@ function getFisAppRaces(dateString) {
 
                 const live = row.querySelector('.live__content');
                 let isLive = ''
-                if(live) {
+                if (live) {
                     isLive = live.textContent === 'live' ? 'Y' : 'N';
                 }
 
-                if(raceDate === dateString) {
+                if (raceDate === dateString) {
                     const tableRow = document.createElement('tr');
                     tableRow.className = 'fis-table-row'
                     tableRow.setAttribute('codex', codex);
@@ -236,7 +244,6 @@ function datePickerInit() {
 
 function applyStyling() {
     const select = document.querySelectorAll("select");
-    const submitBtn = document.getElementById("submitBtn");
     const collapsibleRaces = document.querySelector('.collapsible-races');
     const collapsibleArrow = document.getElementById('collapsible-arrow');
     const fisAppTable = document.querySelector('.fis-app-table');
@@ -247,10 +254,6 @@ function applyStyling() {
             selectElement.classList.add('option-selected-color');
         }
     });
-
-    submitBtn.addEventListener("click", () => {
-        loader.style.display = "block";
-    })
 
     collapsibleArrow.style.transition = 'transform 0.2s';
     collapsibleRaces.addEventListener("click", () => {
@@ -268,7 +271,7 @@ function toggleHeaderOnScroll() {
   let lastScroll = 0;
 
   window.addEventListener('scroll', function () { let scroll = window.scrollY || this.document.documentElement.scrollTop;
-    if(Math.abs(scroll-lastScroll) < threshold) {
+    if (Math.abs(scroll-lastScroll) < threshold) {
       return;
     }
     
@@ -280,3 +283,31 @@ function toggleHeaderOnScroll() {
     lastScroll = scroll;
   });
 }
+
+//function validateForm() {
+//    const form = document.getElementById("userInfo");
+//    const inputs = form.querySelectorAll("input, select");
+//    const submitBtn = document.getElementById("submitBtn");
+//
+//    function checkFormValidity() {
+//        let isValid = true;
+//        inputs.forEach(input => {
+//            console.log(input.value.trim())
+//            if (!input.value.trim() || input.value === "null") {
+//                isValid = false;
+//            }
+//        });
+//        if (isValid) {
+//            console.log('invalid');
+//            submitBtn.setAttribute('disabled', 'true');
+//        } else {
+//            console.log('valid');
+//            submitBtn.removeAttribute('disabled');
+//        }
+//    }
+//
+//    inputs.forEach(input => {
+//        input.addEventListener('input', checkFormValidity);
+//        input.addEventListener('change', checkFormValidity);
+//    });
+//}
