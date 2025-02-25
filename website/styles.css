@@ -254,3 +254,12 @@ select {
   background-color: #333;
   margin: 10px 0;
 }
+
+.name-row {
+  border: none;
+}
+
+table.run-times th, table.run-times td{
+  font-size: 12px;
+  padding: 12px 2px;
+}
