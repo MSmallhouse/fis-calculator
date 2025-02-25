@@ -57,6 +57,8 @@ function formSubmitBehavior() {
                     results.append(notFound);
                 }
 
+                console.log(data);
+
                 const table = document.createElement("table");
                 const tableHead = document.createElement("thead");
                 const tableBody = document.createElement("tbody");
@@ -64,8 +66,27 @@ function formSubmitBehavior() {
                 headerRow.innerHTML = `
                     <th>Pl</th>
                     <th>Name</th>
+                    `;
+                
+                // add times for FIS Livetiming
+                if (data.isFisLivetiming) {
+                    if (data.event == 'SGpoints' || data.event == 'DHpoints') {
+                        headerRow.innerHTML += `
+                        <th>R1</th>
+                        <th>Total</th>
+                        `;
+                    } else {
+                        headerRow.innerHTML += `
+                        <th>R1</th>
+                        <th>R2</th>
+                        <th>Total</th>
+                        `;
+                    }
+                }
+                headerRow.innerHTML += `
                     <th>Points</th>
-                    <th>Score</th>`;
+                    <th>Score</th>
+                    `;
                 tableHead.append(headerRow);
                 table.append(tableHead);
 
@@ -73,12 +94,34 @@ function formSubmitBehavior() {
                     const row = document.createElement("tr");
                     const placeCell = document.createElement("td");
                     const nameCell = document.createElement("td");
-                    const pointsCell = document.createElement("td");
-                    const scoreCell = document.createElement("td");
 
                     placeCell.textContent = result.place;
                     nameCell.textContent = result.name;
                     nameCell.classList.add("text-break");
+                    row.append(placeCell);
+                    row.append(nameCell);
+
+                    if (data.isFisLivetiming) {
+                        table.classList.add('run-times');
+                        table.style.fontSize = '12px';
+                        const r1Cell = document.createElement('td');
+                        const resultCell = document.createElement('td');
+
+                        r1Cell.textContent = `${result.r1_time || ''} (${result.r1_rank || ''})`
+                        row.append(r1Cell);
+
+                        if (data.event == 'SLpoints' || data.event == 'GSpoints') {
+                            const r2Cell = document.createElement('td');
+                            r2Cell.textContent = `${result.r2_time || ''} (${result.r2_rank || ''})`
+                            row.append(r2Cell);
+                        }
+                        resultCell.textContent = `${result.time || ''}`
+                        row.append(resultCell);
+                    }
+
+                    const pointsCell = document.createElement("td");
+                    const scoreCell = document.createElement("td");
+
                     pointsCell.textContent = result.points.toFixed(2);
                     pointsCell.classList.add("text-center");
                     scoreCell.textContent = result.score.toFixed(2);
@@ -86,8 +129,6 @@ function formSubmitBehavior() {
                     if (result.score < result.points) {
                         scoreCell.classList.add("personal-best");
                     }
-                    row.append(placeCell);
-                    row.append(nameCell);
                     row.append(pointsCell);
                     row.append(scoreCell);
                     tableBody.append(row);
