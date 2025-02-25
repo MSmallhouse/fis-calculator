@@ -17,6 +17,11 @@ function formatDatestring(date) {
     return `${year}-${month}-${day}`
 }
 
+// sometimes, run times don't come through or come through as 0 seconds - don't use these
+function isValidRunTime(time) {
+    return time && time != "0.00";
+}
+
 function formSubmitBehavior() {
     const lambdaURL = "https://imvf3e6jot4nih4i5th43endj40jbfqa.lambda-url.us-east-2.on.aws/";
     const url = document.getElementById("urlInput");
@@ -107,12 +112,16 @@ function formSubmitBehavior() {
                         const r1Cell = document.createElement('td');
                         const resultCell = document.createElement('td');
 
-                        r1Cell.textContent = `${result.r1_time || ''} (${result.r1_rank || ''})`
+                        if (isValidRunTime(result.r1_time)) {
+                            r1Cell.textContent = `${result.r1_time || ''} (${result.r1_rank || ''})`
+                        }
                         row.append(r1Cell);
 
                         if (data.event == 'SLpoints' || data.event == 'GSpoints') {
                             const r2Cell = document.createElement('td');
-                            r2Cell.textContent = `${result.r2_time || ''} (${result.r2_rank || ''})`
+                            if (isValidRunTime(result.r2_time)) {
+                                r2Cell.textContent = `${result.r2_time || ''} (${result.r2_rank || ''})`
+                            }
                             row.append(r2Cell);
                         }
                         resultCell.textContent = `${result.time || ''}`
