@@ -1,9 +1,6 @@
 document.addEventListener('DOMContentLoaded', function() {
     let currentDate = new Date();
     currentDate = formatDatestring(currentDate);
-    console.log(calculatePersonalBestColor(99, 100))
-    console.log(calculatePersonalBestColor(66, 100))
-    console.log(calculatePersonalBestColor(80, 100))
 
     formSubmitBehavior();
     getFisAppRaces(currentDate);
@@ -72,8 +69,6 @@ function formSubmitBehavior() {
                     results.append(notFound);
                 }
 
-                console.log(data);
-
                 const table = document.createElement("table");
                 const tableHead = document.createElement("thead");
                 const tableBody = document.createElement("tbody");
@@ -88,7 +83,6 @@ function formSubmitBehavior() {
                     if (data.event == 'SGpoints' || data.event == 'DHpoints') {
                         headerRow.innerHTML += `
                         <th>R1</th>
-                        <th>Total</th>
                         `;
                     } else {
                         headerRow.innerHTML += `
@@ -122,12 +116,13 @@ function formSubmitBehavior() {
                         const r1Cell = document.createElement('td');
                         const resultCell = document.createElement('td');
 
-                        if (isValidRunTime(result.r1_time)) {
-                            r1Cell.textContent = `${result.r1_time || ''} (${result.r1_rank || ''})`
-                        }
-                        row.append(r1Cell);
 
                         if (data.event == 'SLpoints' || data.event == 'GSpoints') {
+                            if (isValidRunTime(result.r1_time)) {
+                                r1Cell.textContent = `${result.r1_time || ''} (${result.r1_rank || ''})`
+                            }
+                            row.append(r1Cell);
+
                             const r2Cell = document.createElement('td');
                             if (isValidRunTime(result.r2_time)) {
                                 r2Cell.textContent = `${result.r2_time || ''} (${result.r2_rank || ''})`
