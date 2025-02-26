@@ -1,6 +1,9 @@
 document.addEventListener('DOMContentLoaded', function() {
     let currentDate = new Date();
     currentDate = formatDatestring(currentDate);
+    console.log(calculatePersonalBestColor(99, 100))
+    console.log(calculatePersonalBestColor(66, 100))
+    console.log(calculatePersonalBestColor(80, 100))
 
     formSubmitBehavior();
     getFisAppRaces(currentDate);
@@ -20,6 +23,13 @@ function formatDatestring(date) {
 // sometimes, run times don't come through or come through as 0 seconds - don't use these
 function isValidRunTime(time) {
     return time && time != "0.00";
+}
+
+function calculatePersonalBestColor(score, points) {
+    let multiplier = (points-score) / points
+    // max darkness is scoring 25% lower than current points
+    // scale this by 0.5 then add 0.5 for resulting range of 0.5 to 1 opacity
+    return Math.min( (multiplier/0.25), 1) * 0.5 + 0.5
 }
 
 function formSubmitBehavior() {
@@ -137,6 +147,7 @@ function formSubmitBehavior() {
                     scoreCell.classList.add("text-center");
                     if (result.score < result.points) {
                         scoreCell.classList.add("personal-best");
+                        scoreCell.style.opacity = calculatePersonalBestColor(result.score, result.points);
                     }
                     row.append(pointsCell);
                     row.append(scoreCell);

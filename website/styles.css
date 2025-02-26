@@ -198,9 +198,15 @@ select {
   .media-line-break {
     display: none;
   }
+
   .media-icon-spacing {
     display: inline;
   }
+
+  table.run-times th, table.run-times td {
+    font-size: 16px;
+  }
+
 }
 
 .contact a {
