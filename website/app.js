@@ -79,7 +79,7 @@ function formSubmitBehavior() {
                     `;
                 
                 // add times for FIS Livetiming
-                if (data.isFisLivetiming) {
+                if (data.hasRunTimes) {
                     if (data.event == 'SGpoints' || data.event == 'DHpoints') {
                         headerRow.innerHTML += `
                         <th>R1</th>
@@ -92,9 +92,10 @@ function formSubmitBehavior() {
                         `;
                     }
                 }
+                const scoreString = data.areScoresProjections ? 'Projected Score' : 'Score'
                 headerRow.innerHTML += `
                     <th>Points</th>
-                    <th>Score</th>
+                    <th>${scoreString}</th>
                     `;
                 tableHead.append(headerRow);
                 table.append(tableHead);
@@ -110,7 +111,7 @@ function formSubmitBehavior() {
                     row.append(placeCell);
                     row.append(nameCell);
 
-                    if (data.isFisLivetiming) {
+                    if (data.hasRunTimes) {
                         table.classList.add('run-times');
                         table.style.fontSize = '12px';
                         const r1Cell = document.createElement('td');
