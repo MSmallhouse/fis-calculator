@@ -84,7 +84,13 @@ function formSubmitBehavior() {
                         headerRow.innerHTML += `
                         <th>R1</th>
                         `;
-                    } else {
+                    } else if (data.areScoresProjections) {
+                        headerRow.innerHTML += `
+                        <th>R1</th>
+                        <th>Projected Total</th>
+                        `
+                    }
+                    else {
                         headerRow.innerHTML += `
                         <th>R1</th>
                         <th>R2</th>
@@ -130,6 +136,14 @@ function formSubmitBehavior() {
                             }
                             row.append(r2Cell);
                         }
+
+                        if (data.areScoresProjections) {
+                            if (isValidRunTime(result.r1_time)) {
+                                r1Cell.textContent = `${result.r1_time || ''} (${result.r1_rank || ''})`
+                            }
+                            row.append(r1Cell);
+                        }
+
                         resultCell.textContent = `${result.time || ''}`
                         row.append(resultCell);
                     }
