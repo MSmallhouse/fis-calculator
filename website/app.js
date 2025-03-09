@@ -124,7 +124,8 @@ function formSubmitBehavior() {
                         const resultCell = document.createElement('td');
 
 
-                        if (data.event == 'SLpoints' || data.event == 'GSpoints' && !data.areScoresProjections) {
+                        if ((data.event == 'SLpoints' || data.event == 'GSpoints') && !data.areScoresProjections) {
+                            console.log('not proj');
                             if (isValidRunTime(result.r1_time)) {
                                 r1Cell.textContent = `${result.r1_time || ''} (${result.r1_rank || ''})`
                             }
