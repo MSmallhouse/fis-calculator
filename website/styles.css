@@ -221,7 +221,7 @@ select {
   word-break: break-word;
 }
 
-.container p {
+.container p, .container h3 {
   text-align: center;
 }
 
