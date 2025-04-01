@@ -6,6 +6,7 @@ import zipfile
 import io
 import pandas as pd
 import re
+import traceback
 
 from fis_points_download import update_dynamodb
 
@@ -96,4 +97,5 @@ def ussa_points_download(logger):
 
     except Exception as e:
         logger.error("ERROR: error downloading ussa points")
+        logger.error(f"ERROR: {e}\nStack Trace:\n{traceback.format_exc()}")
         logger.error(e)

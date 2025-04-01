@@ -1,4 +1,5 @@
 import datetime
+import re
 from datetime import datetime as dt
 from pytz import timezone
 from datetime import date
@@ -9,6 +10,7 @@ import pandas as pd
 import io
 import boto3
 from decimal import Decimal
+import traceback
 
 def connect_to_dynamo_db(logger): 
 	try:
@@ -26,8 +28,9 @@ def compose_download_url(logger):
 	POINTS_PAGE_URL = "https://www.fis-ski.com/DB/alpine-skiing/fis-points-lists.html"
 	FILE_URL = "https://data.fis-ski.com/fis_athletes/ajax/fispointslistfunctions/export_fispointslist.html?export_csv=true&sectorcode=AL&seasoncode="
 
+	# not using adder for now, found better way below
 	# adder of 26 to make this work, not really sure why
-	listid = 65
+	#listid = 65
 
 	response = requests.get(POINTS_PAGE_URL)
 	if response.status_code != 200:
@@ -36,17 +39,29 @@ def compose_download_url(logger):
 	# parse html content
 	soup = BeautifulSoup(response.content, 'html.parser')
 
-	# get all div headings with the year, then grab the most recent one
-	year_divs = soup.find_all('div', {'class': 'g-xs g-sm g-md g-lg bold justify-center'})
-	#print(f"year_divs: {year_divs}")
-	# TODO: fix ERROR later - this needs to be 2024 now but is showing 2025 as of 4/5/2024
-	year = year_divs[1].text
+	# need to also get previous list id because the most recent list isn't always for a valid date yet
+	csv_links = [a for a in soup.find_all('a', onclick=True) if 'fct_export_fispointslist_csv' in a['onclick']]
+	onclick_attr = csv_links[0]['onclick']
+	match = re.search(r"fct_export_fispointslist_csv\(\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*\)", onclick_attr)
+	year = match.group(2)
+	list_id = match.group(3)
 
-	download_links = soup.find_all('a')
-	for link in download_links:
-		# count lists to get correct id for composing correct download url later
-		if "Excel (csv)" in link.text:
-			listid += 1
+	prev_onclick_attr = csv_links[1]['onclick']
+	match = re.search(r"fct_export_fispointslist_csv\(\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*\)", prev_onclick_attr)
+	prev_year = match.group(2)
+	prev_list_id = match.group(3)
+
+	# not used for now, found more robust way to grab year above
+	# get all div headings with the year, then grab the most recent one
+	#year_divs = soup.find_all('div', {'class': 'g-xs g-sm g-md g-lg bold justify-center'})
+	#year = year_divs[0].text
+
+	# not used for now, found more robust way to get list id
+	#download_links = soup.find_all('a')
+	#for link in download_links:
+	#	# count lists to get correct id for composing correct download url later
+	#	if "Excel (csv)" in link.text:
+	#		listid += 1
 
 	# get valid from date to make sure this list is valid
 	# this is needed because lists are released on the website before they are "valid", so the most 
@@ -61,10 +76,11 @@ def compose_download_url(logger):
 	tz = timezone('EST')
 	current_datetime = dt.now(tz)
 	if valid_day_datetime > current_datetime.date():
-		listid -= 1
+		list_id = prev_list_id
+		year = prev_year
 
 	# compose download url for the most recent valid list
-	return FILE_URL + "2025" + "&listid=" + str(listid)
+	return FILE_URL + year + "&listid=" + str(list_id)
 
 def get_points_df(download_url):
 	# this response contains the csv with the most recent points list
@@ -184,10 +200,12 @@ def fis_points_download(logger):
 	try:
 		logger.info("Checking fis points")
 		download_url = compose_download_url(logger)
+		print(f'download_url: {download_url}')
 		table = connect_to_dynamo_db(logger)
 		points_df = get_points_df(download_url)
 
 		update_dynamodb(logger, table, points_df)
 	except Exception as e:
-		logger.error("ERROR: error downloading ussa points")
+		logger.error("ERROR: error downloading fis points")
+		logger.error(f"ERROR: {e}\nStack Trace:\n{traceback.format_exc()}")
 		logger.error(e)
