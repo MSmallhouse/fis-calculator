@@ -1,6 +1,7 @@
 from selenium.webdriver.common.by import By
 import json
 import logging
+import traceback
 
 # imports from user-defined modules
 from utils import connect_to_database
@@ -28,14 +29,17 @@ class Race:
         self.min_penalty = int(min_penalty)
         self.event = event
         self.is_fis_race = is_fis_race
+        self.is_tech_race = True
         if event == "SLpoints":
             self.event_multiplier = 730
         if event == "GSpoints":
             self.event_multiplier = 1010
         if event == "SGpoints":
             self.event_multiplier = 1190
+            self.is_tech_race = False
         if event == "DHpoints":
             self.event_multiplier = 1250
+            self.is_tech_race = False
         if event == "ACpoints":
             self.event_multiplier = 1360
         
@@ -44,13 +48,47 @@ class Race:
         self.winning_time = 9999
         self.penalty = 0
 
+        self.url_type = ''
+        if 'vola' in url:
+            self.url_type = 'vola'
+        elif 'live-timing' in url:
+            self.url_type = 'live-timing'
+        else:
+            self.url_type = 'fis'
+        
+        self.r1_times = []
+        self.r2_times = []
+
+    def first_run_projected_scores_adjustment(self):
+        self.are_scores_projections = True
+        if self.event != "SLpoints" and self.event != "GSpoints":
+            self.are_scores_projections = False
+            return
+
+        # early return if any r2 times found
+        for competitor in self.competitors:
+            if hasattr(competitor, "r2_time"):
+                self.are_scores_projections = False
+                return
+
+        for competitor in self.competitors:
+            if not hasattr(competitor, "r1_time"):
+                continue
+            if competitor.r1_time == 9999: #dnf first run
+                continue
+            
+            competitor.time = competitor.r1_time * 2
+            self.winning_time = min(self.winning_time, competitor.time)
+
     def get_points(self):
         self.logger = logging.getLogger()
         self.logger.setLevel(logging.INFO)
         self.logger.info(f"URL PASSED: {self.url}")
-        if "live-timing" not in self.url: # don't need to connect to database for races on livetiming
+        if self.url_type != 'live-timing':
             connect_to_database(self)
         scrape_results(self)
+
+        self.first_run_projected_scores_adjustment()
 
         starting_racers_points = []
         for competitor in self.competitors:
@@ -72,13 +110,17 @@ class Race:
 
     def get_A_and_C(self):
         self.competitors = sorted(self.competitors, key=time_sort)
-        top_ten_finishers = self.competitors[:10]
+        top_ten_finishers = []
+        for i in range(min(10, len(self.competitors))):
+            if self.competitors[i].time == 9999:
+                continue
+            top_ten_finishers.append(self.competitors[i])
 
         # EDGE CASE: tie for 10th
         # consider all ties to have finished in the top 10 per fis rules
-        if len(self.competitors) >= 10:
+        if len(self.competitors) > 10:
             i = 10
-            while self.competitors[i].time == self.competitors[9].time:
+            while self.competitors[i].time == self.competitors[9].time and self.competitors[i].time != 9999 and self.competitors[9].time != 9999:
                 top_ten_finishers.append(self.competitors[i])
                 i += 1
 
@@ -137,12 +179,30 @@ def get_race_points(competitor, race):
     race_points = ((competitor.time/race.winning_time) - 1) * race.event_multiplier
     return round(race_points, 2)
 
+def float_to_time_string(seconds):
+    if seconds is None:
+        return None
+    
+    minutes, secs = divmod(seconds, 60)
+    if minutes:
+        return f'{int(minutes)}:{secs:05.2f}'
+    else:
+        return f'{secs:.2f}'
+
 def handler(event, context):
     try:
+        url = event["queryStringParameters"]["url"]
+        if url == 'preload':
+            return {
+                "statusCode": 200,
+                "body": json.dumps({"message": "preload successful"})
+            }
+
+        # put this down here so page visits don't trigger logging from the lambda function preload - only form fills
         logger = logging.getLogger()
         logger.setLevel(logging.INFO)
+        logger.info(f"event passed: {event}")
 
-        url = event["queryStringParameters"]["url"]
         min_penalty = event["queryStringParameters"]["min-penalty"]
         is_fis_race = True
         race_event = event["queryStringParameters"]["event"]
@@ -151,24 +211,24 @@ def handler(event, context):
             is_fis_race = False
             min_penalty = "40"
         race = Race(url, min_penalty, race_event, is_fis_race)
-        #URL = "https://vola.ussalivetiming.com/race/usa-nh-waterville-valley-mens-njr_37279.html"
+        #URL = "1527"
         #MIN_PENALTY = "23"
         #EVENT = "GSpoints"
-        #is_fis_race = False
+        #is_fis_race = True
         #race = Race(URL, MIN_PENALTY, EVENT, is_fis_race)
 
         race.get_points()
         points_not_found = ""
         finishers = []
         for competitor in race.competitors:
-            # points = 1000 indicates not found in databas
-            #
-            if competitor.fis_points == 1000:
-                points_not_found += competitor.full_name + ' '
-
             # vola ussa races require full name to be scrambled, restore here for nice printing
             if competitor.temp_full_name:
                 competitor.full_name = competitor.temp_full_name
+
+            # points = 1000 indicates not found in databas
+            if competitor.fis_points == 1000:
+                points_not_found += competitor.full_name + ' '
+
             # score = -1 indicates did not finish or did not start
             if competitor.score != -1:
                 finishers.append(competitor)
@@ -179,16 +239,34 @@ def handler(event, context):
                 "place": "" if i > 0 and competitor.time == finishers[i-1].time else i+1,
                 "name": competitor.full_name,
                 "score": competitor.score,
-                "points": competitor.fis_points
+                "points": competitor.fis_points,
+                # only include run time and ranks if they exist
+                **(
+                    {
+                        key: value
+                        for key, value in {
+                            "r1_time": float_to_time_string( getattr(competitor, "r1_time", None) ),
+                            "r1_rank": getattr(competitor, "r1_rank", None),
+                            "r2_time": float_to_time_string( getattr(competitor, "r2_time", None) ),
+                            "r2_rank": getattr(competitor, "r2_rank", None),
+                            "time": float_to_time_string(competitor.time)
+                        }.items()
+                        #if race.url_type == "fis" and value is not None
+                        if value is not None
+                    }
+                )
             }
             for i, competitor in enumerate(finishers)
         ]
         return_data = {
             "results": output,
+            "event": race.event,
+            "hasRunTimes": True,
+            "areScoresProjections": race.are_scores_projections,
             "notFound": points_not_found
         }
     except Exception as e:
-        logger.error(f"ERROR: {e}")
+        logger.error(f"ERROR: {e}\nStack Trace:\n{traceback.format_exc()}")
     try:
         return {
             "statusCode": 200,

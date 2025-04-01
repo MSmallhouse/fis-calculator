@@ -1,5 +1,7 @@
 import requests
 import re
+import time
+import phpserialize
 
 TIMES_AS_LETTERS = {"DNF", "DNS", "DSQ", "DQ", "Did Not Finish", "Did Not Start", "Disqualified"}
 
@@ -13,6 +15,7 @@ class Competitor:
         self.fis_points = 1000
         self.score = -1
         self.start_order = 9999
+        self.fiscode = 0
 
     def __str__(self):
         return f"{self.full_name} score: {self.score}"
@@ -218,13 +221,7 @@ def vola_scraper(race):
             race.competitors.append(competitor)
             racers.add(full_name)
     
-    def add_times_to_racers():
-        names_and_times = []
-        if race.event == "SGpoints" or race.event == "DHpoints":
-            names_and_times = extract_names_and_times("1")
-        else:
-            names_and_times = extract_names_and_times("2")
-        
+    def add_run_time(names_and_times, is_first_run):
         competitor_ids = {} 
         for i in range(len(race.competitors)):
             competitor_ids[race.competitors[i].full_name] = i
@@ -256,11 +253,60 @@ def vola_scraper(race):
             if full_name in competitor_ids:
                 #print(f'time for: {full_name} : {time}')
                 id = competitor_ids[full_name]
-                race.competitors[id].time = time_to_float(time)
-                race.winning_time = min(race.winning_time, race.competitors[id].time)
+                
+                #TODO: get r1, r2 ranks for tech races
+                if is_first_run and race.is_tech_race:
+                    r1_time = time_to_float(time)
+                    race.competitors[id].r1_time = r1_time
+
+                elif is_first_run and not race.is_tech_race:
+                    race.competitors[id].time = time_to_float(time)
+                    race.winning_time = min(race.winning_time, race.competitors[id].time)
+
+                else:
+                    total = time_to_float(time)
+                    if hasattr(race.competitors[id], 'r1_time'):
+                        r2_time = total - race.competitors[id].r1_time
+                        race.competitors[id].r2_time = r2_time
+
+                    race.competitors[id].time = total
+                    race.winning_time = min(race.winning_time, race.competitors[id].time)
+
+    def add_run_ranks():
+        if not race.is_tech_race:
+            return
+        
+        for competitor in race.competitors:
+            if hasattr(competitor, "r1_time"):
+                race.r1_times.append(competitor.r1_time)
+            if hasattr(competitor, "r2_time"):
+                race.r2_times.append(competitor.r2_time)
+
+        race.r1_times = sorted(race.r1_times)
+        race.r2_times = sorted(race.r2_times)
+
+        for competitor in race.competitors:
+            if hasattr(competitor, "r1_time"):
+                competitor.r1_rank = get_rank(competitor.r1_time, race.r1_times)
+            if hasattr(competitor, "r2_time"):
+                competitor.r2_rank = get_rank(competitor.r2_time, race.r2_times)
+
+    def add_times_to_racers():
+        names_and_times_r1 = []
+        names_and_times_r2 = []
+
+        names_and_times_r1 = extract_names_and_times("1")
+        if race.event == "SLpoints" or race.event == "GSpoints":
+            names_and_times_r2 = extract_names_and_times("2")
+        
+        add_run_time(names_and_times_r1, is_first_run=True)
+        if race.event == "SLpoints" or race.event == "GSpoints":
+            add_run_time(names_and_times_r2, is_first_run=False)
+
 
     initialize_starting_racers()
     add_times_to_racers()
+    add_run_ranks()
 
 def livetiming_scraper(race):
     # request URL to get raw data from livetiming
@@ -312,10 +358,25 @@ def livetiming_scraper(race):
             continue
         starters.append(racer)
     
+    r1_times = []
+    r2_times = []
+    for starter in starters:
+        for value in starter:
+            if 'r1' in value:
+                r1_times.append(time_to_float( value.split('=')[1] ))
+            if 'r2' in value:
+                r2_times.append(time_to_float( value.split('=')[1] ))
+    r1_times = sorted(r1_times)
+    r2_times = sorted(r2_times)
+    
     for starter in starters:
         # strip off "m= from name"
         full_name = starter[0][2:]
         competitor = Competitor(full_name)
+        for value in starter:
+            if 'r1' in value:
+                competitor.r1_time = time_to_float( value.split('=')[1] )
+                competitor.r1_rank = get_rank(competitor.r1_time, r1_times)
 
         # filter for did not finish, did not start, or disqualified
         if ("tt=" not in starter[-1] or
@@ -325,8 +386,189 @@ def livetiming_scraper(race):
             "DNS" in "".join(starter[1:])): #edge case, sometimes time is listed as DQg35 for example, or sometimes single run time shown for combined time
             competitor.time = 9999
         else:
-            competitor.time = time_to_float(starter[-1][3:])
+            total = time_to_float(starter[-1][3:])
+            competitor.time = total
+            if race.event == "SLpoints" or race.event == "GSpoints":
+                for value in starter:
+                    if 'r2' in value:
+                        competitor.r2_time = time_to_float( value.split('=')[1] )
+                        competitor.r2_rank = get_rank(competitor.r2_time, r2_times)
+
+                # bug fix - sometimes total time doesn't get added as r1 + r2
+                if competitor.time == competitor.r1_time or competitor.time == competitor.r2_time:
+                    competitor.time = competitor.r1_time + competitor.r2_time
+
         competitor.fis_points = int(starter[1][3:])/100
+        race.competitors.append(competitor)
+        race.winning_time = min(race.winning_time, competitor.time)
+    return
+
+def fis_livetiming_scraper(race):
+
+    if 'fis-ski' in race.url:
+        match = re.search(r'lv-al(\d+)', race.url)
+        CODEX = match.group(1)
+    else:
+        CODEX = race.url.strip()
+    TIMESTAMP = int(time.time() * 1000)
+
+    def strip_tags(raw_data):
+        return re.sub(r'</?lt>', '', raw_data)
+    
+    # these mess up php serialization - they take up more than 1 character and make the string length count incorrect
+    # just replace them with a z as a dummy character
+    def remove_german_chars(data):
+        replacements = {
+        'ä': 'z', 'ö': 'z', 'ü': 'z', 'ß': 'z', 
+        'Ä': 'Z', 'Ö': 'Z', 'Ü': 'Z',
+        'é': 'z', 'É': 'Z'
+        }
+        pattern = re.compile("|".join(re.escape(k) for k in replacements.keys()))
+        return pattern.sub(lambda m: replacements[m.group(0)], data)
+
+    def get_server_url():
+        url = f'https://live.fis-ski.com/general/serverListFull.xml?t={TIMESTAMP}'
+        raw_data = session.get(url).text
+        cleaned_data = strip_tags(raw_data)
+        parsed_data = phpserialize.loads(cleaned_data.encode(), decode_strings=True)
+        return parsed_data['servers'][0][0]
+    
+    def get_race_data(server_url):
+        TIMESTAMP = int(time.time() * 1000)
+        url = f'{server_url}/al{CODEX}/main.xml?t={TIMESTAMP}'
+        raw_data = session.get(url).content.decode('utf-8')
+        cleaned_data = strip_tags(raw_data)
+        cleaned_data = remove_german_chars(cleaned_data)
+
+        # note, iso-8859-1 encoding needed to correctly encode foreign characters, such as é
+        return phpserialize.loads(cleaned_data.encode('iso-8859-1'), decode_strings=True)
+
+    session = requests.Session()
+    server_url = get_server_url()
+    race_data = get_race_data(server_url)
+
+    starters = {}
+    entered = race_data.get("racers", [])
+    for racer in entered.values():
+        # format: fiscode: 'last_name, first_name'
+        starters[racer[0]] = {
+            'full_name': f'{racer[1]}, {racer[2]}'
+        }
+    
+    r1_start_list = race_data.get("startlist")[0][0][0]
+    for racer in r1_start_list.values():
+        fiscode = racer[0]
+        started = False if racer[2] == 'dns' else True
+        if not started:
+            starters.pop(fiscode)
+
+    run_number = 1
+    if race.event == "SGpoints" or race.event == "DHpoints":
+        run_number = 0
+    
+    # get first run start order to retrieve first run times
+    first_run_start_order = race_data.get("startlist")[0][0][0]
+    r1_bib_to_fiscode_map = {}
+    for r1_bib, racer in enumerate(first_run_start_order.values()):
+        finished = False
+        for j in range(len(racer.values())):
+            if 'finish' in str( racer[j]):
+                finished = True
+        fiscode = racer[0]
+        r1_bib_to_fiscode_map[r1_bib] = {'fiscode': fiscode, 'finished': finished}
+
+    # get second run start order to retrieve second run times
+    second_run_start_order = {}
+    second_run_start_order = race_data.get("startlist")[0][0].get(run_number)
+    r2_bib_to_fiscode_map = {}
+    if second_run_start_order:
+        for r2_bib, racer in enumerate(second_run_start_order.values()):
+            finished = False
+            for j in range(len(racer.values())):
+                if 'finish' in str( racer[j]):
+                    finished = True
+            fiscode = racer[0]
+            r2_bib_to_fiscode_map[r2_bib] = {'fiscode': fiscode, 'finished': finished}
+    
+    # get finish_location from racedef
+    # for tech look for second occurance of 'finished'
+    # for speed look for first occurance
+    finish_location = 0
+    if second_run_start_order:
+        racedef = race_data.get("racedef")[0][run_number]
+        for i, run_info in enumerate(racedef.values()):
+            for j in range(len(run_info.values())):
+                if 'finish' in str( run_info[j] ):
+                    finish_location = i
+
+    # add first run times
+    results = race_data.get("result")[0][0]
+    for r1_bib, result in results.items():
+        if result is None:
+            continue
+
+        # with splits / intervals, a dnf can show the first two splits but no finish time
+        if len(result) != finish_location + 1:
+            continue
+
+        # sometimes, : is included in time, for example: 85530:p2 or 85530:c
+        if ':' in str( result[finish_location] ):
+            result[finish_location] = result[finish_location].split(':')[0]
+        fiscode = r1_bib_to_fiscode_map[r1_bib]['fiscode']
+        
+        # bug fix - sometimes weird fiscode will enter data
+        if fiscode not in starters.keys():
+            continue
+
+        if r1_bib_to_fiscode_map[r1_bib]['finished']:
+            starters[fiscode]['r1_time'] = round( int(result[finish_location]) / 1000, 2) # convert from miliseconds to seconds
+        else:
+            starters[fiscode]['result'] = 9999
+
+    # add second run times
+    if second_run_start_order:
+        results = race_data.get("result")[0].get(run_number)
+        if results:
+            for r2_bib, result in results.items():
+                if result is None:
+                    continue
+
+                # with splits / intervals, a dnf can show the first two splits but no finish time
+                if len(result) != finish_location + 1:
+                    continue
+
+                # sometimes, : is included in time, for example: 85530:p2 or 85530:c
+                if ':' in str( result[finish_location] ):
+                    result[finish_location] = result[finish_location].split(':')[0]
+                fiscode = r2_bib_to_fiscode_map[r2_bib]['fiscode']
+                if r2_bib_to_fiscode_map[r2_bib]['finished']:
+                    starters[fiscode]['result'] = round( int(result[finish_location]) / 1000, 2) # convert from miliseconds to seconds
+                    if 'r1_time' in starters[fiscode].keys():
+                        starters[fiscode]['r2_time'] = starters[fiscode]['result'] - starters[fiscode]['r1_time']
+                else:
+                    starters[fiscode]['result'] = 9999
+    
+    r1_times = sorted([starters[f]['r1_time'] for f in starters if 'r1_time' in starters[f].keys()])
+    r2_times = sorted([starters[f]['r2_time'] for f in starters if 'r2_time' in starters[f].keys()])
+
+    for fiscode in starters:
+        full_name = starters[fiscode]['full_name']
+        competitor = Competitor(full_name)
+        if 'result' in starters[fiscode].keys():
+            competitor.time = starters[fiscode]['result']
+        if 'r1_time' in starters[fiscode].keys():
+            competitor.r1_time = starters[fiscode]['r1_time']
+            competitor.r1_rank = get_rank(competitor.r1_time, r1_times)
+        if 'r2_time' in starters[fiscode].keys():
+            competitor.r2_time = starters[fiscode]['r2_time']
+            competitor.r2_rank = get_rank(competitor.r2_time, r2_times)
+        if 'result' not in starters[fiscode].keys() and 'r2_time' not in starters[fiscode].keys():
+            competitor.time = 9999
+        
+        competitor.fiscode = fiscode
+
+        if competitor.time == 0: # bug fix, sometimes dnf is listed as 0 seconds
+            continue
         race.competitors.append(competitor)
         race.winning_time = min(race.winning_time, competitor.time)
     return
@@ -346,3 +588,13 @@ def time_to_float(time):
         seconds = time.split(":")[1]
         time = float(minutes)*60 + float(seconds)
     return time
+
+def get_rank(time, sorted_times):
+    # sometimes, time isn't found - exclude these from rank
+    if time == 0 or time is None:
+        return None
+    
+    # filter out times of zero from times not found
+    filtered_times = [t for t in sorted_times if t > 0]
+    return filtered_times.index(time) + 1 if time in filtered_times else None
+    
