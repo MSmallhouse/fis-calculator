@@ -30,7 +30,7 @@ function calculatePersonalBestColor(score, points) {
 }
 
 function formSubmitBehavior() {
-    const lambdaURL = "https://imvf3e6jot4nih4i5th43endj40jbfqa.lambda-url.us-east-2.on.aws/";
+    const lambdaURL = "https://hsa35mz4zsbu6nqwlb5jvkk4o40jruqd.lambda-url.us-east-2.on.aws/";
     const url = document.getElementById("urlInput");
     const eventSelector = document.getElementById("eventSelector");
     const minPenalty = document.getElementById("minPenalty");
