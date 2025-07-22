@@ -239,8 +239,8 @@ function getFisAppRaces(dateString) {
                 const displayDate = row.querySelector('.timezone-date').textContent.trim();
                 const raceDate = row.querySelector('.timezone-date').getAttribute('data-date');
                 const countryCode = row.querySelector('.country__name-short').textContent;
-                const event = splitRowItems[4].textContent.trim();
-                const raceCategory = splitRowItems[5].textContent.trim();
+                const raceCategory = splitRowItems[4].textContent.trim();
+                const event = splitRowItems[5].textContent.trim();
                 const gender = row.querySelector('.gender__item').textContent;
 
                 const live = row.querySelector('.live__content');
