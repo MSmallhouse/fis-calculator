@@ -89,8 +89,14 @@ function formSubmitBehavior() {
                         <th>R1</th>
                         <th>Projected Total</th>
                         `
-                    }
-                    else {
+                    } else if (data.hasThirdRun) {
+                        headerRow.innerHTML += `
+                        <th>R1</th>
+                        <th>R2</th>
+                        <th>R3</th>
+                        <th>Total</th>
+                        `;
+                    } else {
                         headerRow.innerHTML += `
                         <th>R1</th>
                         <th>R2</th>
@@ -125,7 +131,6 @@ function formSubmitBehavior() {
 
 
                         if ((data.event == 'SLpoints' || data.event == 'GSpoints') && !data.areScoresProjections) {
-                            console.log('not proj');
                             if (isValidRunTime(result.r1_time)) {
                                 r1Cell.textContent = `${result.r1_time || ''} (${result.r1_rank || ''})`
                             }
@@ -136,6 +141,26 @@ function formSubmitBehavior() {
                                 r2Cell.textContent = `${result.r2_time || ''} (${result.r2_rank || ''})`
                             }
                             row.append(r2Cell);
+                        }
+
+                        // shitty repeated code but just put this to get 3 run slalom feature out
+                        if (data.hasThirdRun) {
+                            if (isValidRunTime(result.r1_time)) {
+                                r1Cell.textContent = `${result.r1_time || ''} (${result.r1_rank || ''})`
+                            }
+                            row.append(r1Cell);
+
+                            const r2Cell = document.createElement('td');
+                            if (isValidRunTime(result.r2_time)) {
+                                r2Cell.textContent = `${result.r2_time || ''} (${result.r2_rank || ''})`
+                            }
+                            row.append(r2Cell);
+
+                            const r3Cell = document.createElement('td');
+                            if (isValidRunTime(result.r3_time)) {
+                                r3Cell.textContent = `${result.r3_time || ''} (${result.r3_rank || ''})`
+                            }
+                            row.append(r3Cell);
                         }
 
                         if (data.areScoresProjections) {
