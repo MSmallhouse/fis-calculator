@@ -129,8 +129,7 @@ function formSubmitBehavior() {
                         const r1Cell = document.createElement('td');
                         const resultCell = document.createElement('td');
 
-
-                        if ((data.event == 'SLpoints' || data.event == 'GSpoints') && !data.areScoresProjections) {
+                        if ((data.event == 'SLpoints' || data.event == 'GSpoints') && !data.areScoresProjections && !data.hasThirdRun) {
                             if (isValidRunTime(result.r1_time)) {
                                 r1Cell.textContent = `${result.r1_time || ''} (${result.r1_rank || ''})`
                             }
