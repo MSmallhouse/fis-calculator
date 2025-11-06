@@ -44,6 +44,12 @@ function formSubmitBehavior() {
     form.onsubmit = e => {
         e.preventDefault();
 
+        // Fire Google Analytics event
+        gtag('event', 'form_fill', {
+            event_category: 'engagement',
+            event_label: 'Points form filled/submitted'
+        })
+
         // make sure form is completed
         if (!url.value.trim() || !minPenalty.value || !eventSelector.value) {
             return;
