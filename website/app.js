@@ -49,6 +49,7 @@ function formSubmitBehavior() {
             event_category: 'engagement',
             event_label: 'Points form filled/submitted'
         })
+        console.log('GA key event fired');
 
         // make sure form is completed
         if (!url.value.trim() || !minPenalty.value || !eventSelector.value) {
