@@ -1,40 +1,33 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  python3.9
+  SAM template to scrape livetiming info using Python (no Docker)
 
-  SAM template to scrape livetiming for info using selenium
-
-# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
 Globals:
   Function:
     Timeout: 120
     MemorySize: 2048
+    Runtime: python3.10
+    Architectures:
+      - x86_64
 
 Resources:
   getLivetimingInfoFunction:
-    Type: AWS::Serverless::Function 
+    Type: AWS::Serverless::Function
     Properties:
-      PackageType: Image
-      Architectures:
-        - x86_64
+      Handler: app.handler
+      CodeUri: src/
+
       Events:
         getLivetimingInfo:
-          Type: Api 
+          Type: Api
           Properties:
             Path: /get-livetiming-info
             Method: get
-    Metadata:
-      Dockerfile: Dockerfile
-      DockerContext: ./src
-      DockerTag: python3.9-v1
 
 Outputs:
-  # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
-  # Find out more about other implicit resources you can reference within SAM
-  # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
   getLivetimingInfoApi:
-    Description: "API Gateway endpoint URL for Prod stage for getLivetimingInfo function"
+    Description: "API Gateway endpoint URL for Prod stage"
     Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/get-livetiming-info/"
   getLivetimingInfoFunction:
     Description: "getLivetimingInfo Lambda Function ARN"

@@ -1,4 +1,3 @@
-from selenium.webdriver.common.by import By
 import json
 import logging
 import traceback
@@ -6,6 +5,7 @@ import traceback
 # imports from user-defined modules
 from utils import connect_to_database
 from utils import scrape_results
+from exceptions import UserFacingException
 
 FIS_EVENT_MAXIMUMS = {
     "SLpoints": 165,
@@ -23,10 +23,11 @@ USSA_EVENT_MAXIMUMS = {
 }
 
 class Race:
-    def __init__(self, url, min_penalty, event, is_fis_race):
+    def __init__(self, url, min_penalty, adder, event, is_fis_race):
         # race information variables
         self.url = url
         self.min_penalty = int(min_penalty)
+        self.adder = int(adder)
         self.event = event
         self.is_fis_race = is_fis_race
         self.is_tech_race = True
@@ -104,7 +105,9 @@ class Race:
     def calculate_penalty(self, starting_racers_points):
         A, C = self.get_A_and_C()
         B = self.get_B(starting_racers_points)
-        penalty = max((A+B-C)/10, self.min_penalty)
+        #uncomment when 8 point adder gets put in, check 1st page download https://www.fis-ski.com/DB/alpine-skiing/fis-points-lists.html
+        #penalty = max(((A+B-C)/10) + self.adder, self.min_penalty)
+        penalty = max(((A+B-C)/10), self.min_penalty)
         self.penalty = round(penalty, 2)
         return
 
@@ -190,6 +193,8 @@ def float_to_time_string(seconds):
         return f'{secs:.2f}'
 
 def handler(event, context):
+    return_data = {}
+
     try:
         url = event["queryStringParameters"]["url"]
         if url == 'preload':
@@ -201,21 +206,23 @@ def handler(event, context):
         # put this down here so page visits don't trigger logging from the lambda function preload - only form fills
         logger = logging.getLogger()
         logger.setLevel(logging.INFO)
-        logger.info(f"event passed: {event}")
+        logger.info(f"params: {event['queryStringParameters']}")
 
-        min_penalty = event["queryStringParameters"]["min-penalty"]
+        min_penalty = event["queryStringParameters"]["min-penalty"].split(",")[0]
+        adder = event["queryStringParameters"]["min-penalty"].split(",")[1]
         is_fis_race = True
         race_event = event["queryStringParameters"]["event"]
 
         if min_penalty < "0":
             is_fis_race = False
             min_penalty = "40"
-        race = Race(url, min_penalty, race_event, is_fis_race)
-        #URL = "1527"
-        #MIN_PENALTY = "23"
-        #EVENT = "GSpoints"
+        race = Race(url, min_penalty, adder, race_event, is_fis_race)
+        #URL = "15061"
+        #MIN_PENALTY = "60"
+        #ADDER = "8"
+        #EVENT = "SLpoints"
         #is_fis_race = True
-        #race = Race(URL, MIN_PENALTY, EVENT, is_fis_race)
+        #race = Race(URL, MIN_PENALTY, ADDER, EVENT, is_fis_race)
 
         race.get_points()
         points_not_found = ""
@@ -249,6 +256,8 @@ def handler(event, context):
                             "r1_rank": getattr(competitor, "r1_rank", None),
                             "r2_time": float_to_time_string( getattr(competitor, "r2_time", None) ),
                             "r2_rank": getattr(competitor, "r2_rank", None),
+                            "r3_time": float_to_time_string( getattr(competitor, "r3_time", None) ),
+                            "r3_rank": getattr(competitor, "r3_rank", None),
                             "time": float_to_time_string(competitor.time)
                         }.items()
                         #if race.url_type == "fis" and value is not None
@@ -263,17 +272,29 @@ def handler(event, context):
             "event": race.event,
             "hasRunTimes": True,
             "areScoresProjections": race.are_scores_projections,
-            "notFound": points_not_found
+            "notFound": points_not_found,
+            "hasThirdRun": 'r3_time' in output[0].keys()
         }
-    except Exception as e:
-        logger.error(f"ERROR: {e}\nStack Trace:\n{traceback.format_exc()}")
-    try:
+
         return {
             "statusCode": 200,
             "body": json.dumps(return_data)
         }
 
+    except UserFacingException as e:
+        logger = logging.getLogger()
+        logger.setLevel(logging.INFO)
+        logger.error(f"USER RAISED ERROR: {e}\nStack Trace:\n{traceback.format_exc()}")
+        return {
+            "statusCode": e.status_code,
+            "body": json.dumps({"error": str(e)})
+        }
+
     except Exception as e:
+        logger = logging.getLogger()
+        logger.setLevel(logging.INFO)
+        logger.error(f"ERROR: {e}\nStack Trace:\n{traceback.format_exc()}")
+
         return {
             "statusCode": 500,
             "body": json.dumps({"error": str(e)})

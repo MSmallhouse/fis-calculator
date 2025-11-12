@@ -2,6 +2,7 @@ import requests
 import re
 import time
 import phpserialize
+from exceptions import UserFacingException
 
 TIMES_AS_LETTERS = {"DNF", "DNS", "DSQ", "DQ", "Did Not Finish", "Did Not Start", "Disqualified"}
 
@@ -431,21 +432,45 @@ def fis_livetiming_scraper(race):
         raw_data = session.get(url).text
         cleaned_data = strip_tags(raw_data)
         parsed_data = phpserialize.loads(cleaned_data.encode(), decode_strings=True)
+
         return parsed_data['servers'][0][0]
     
     def get_race_data(server_url):
         TIMESTAMP = int(time.time() * 1000)
         url = f'{server_url}/al{CODEX}/main.xml?t={TIMESTAMP}'
-        raw_data = session.get(url).content.decode('utf-8')
+
+        response = session.get(url)
+        if response.status_code == 404:
+            raise UserFacingException("Race is not live or not found", status_code=404)
+
+        raw_data = response.content.decode('utf-8')
         cleaned_data = strip_tags(raw_data)
         cleaned_data = remove_german_chars(cleaned_data)
 
         # note, iso-8859-1 encoding needed to correctly encode foreign characters, such as é
         return phpserialize.loads(cleaned_data.encode('iso-8859-1'), decode_strings=True)
+    
+    def construct_start_order_to_fiscode_map(start_order):
+        if not start_order:
+            return {}
+
+        bib_to_fiscode_map = {}
+        for bib, racer in enumerate(start_order.values()):
+            finished = False
+            for j in range(len(racer.values())):
+                if 'finish' in str( racer[j] ):
+                    finished = True
+            fiscode = racer[0]
+            bib_to_fiscode_map[bib] = {'fiscode': fiscode, 'finished': finished}
+        return bib_to_fiscode_map
 
     session = requests.Session()
     server_url = get_server_url()
     race_data = get_race_data(server_url)
+    
+    if (not race_data.get("result")
+        or not race_data.get("startlist")):
+        raise UserFacingException("Wait for the race to start", status_code=404)
 
     starters = {}
     entered = race_data.get("racers", [])
@@ -455,40 +480,44 @@ def fis_livetiming_scraper(race):
             'full_name': f'{racer[1]}, {racer[2]}'
         }
     
+
+    # remove entered racers listed as 'dns'
+    # also remove entered racers not listed at all on the start list, sometimes they are just excluded and not listed as 'dns'
     r1_start_list = race_data.get("startlist")[0][0][0]
+    started_fiscodes = []
     for racer in r1_start_list.values():
         fiscode = racer[0]
-        started = False if racer[2] == 'dns' else True
-        if not started:
-            starters.pop(fiscode)
+        if racer[2] == 'dns':
+            continue
+        started_fiscodes.append(fiscode)
+    
+    did_not_start = []
+    for fiscode in starters.keys():
+        if fiscode not in started_fiscodes:
+            did_not_start.append(fiscode)
+    for fiscode in did_not_start:
+        starters.pop(fiscode)
+    #for racer in entered.values():
+    #    fiscode = racer[0]
+    #    if fiscode not in r1_started:
+    #        print(f'{racer[1]}, {racer[2]}')
+    #        #starters.pop(fiscode)
 
     run_number = 1
     if race.event == "SGpoints" or race.event == "DHpoints":
         run_number = 0
     
-    # get first run start order to retrieve first run times
     first_run_start_order = race_data.get("startlist")[0][0][0]
-    r1_bib_to_fiscode_map = {}
-    for r1_bib, racer in enumerate(first_run_start_order.values()):
-        finished = False
-        for j in range(len(racer.values())):
-            if 'finish' in str( racer[j]):
-                finished = True
-        fiscode = racer[0]
-        r1_bib_to_fiscode_map[r1_bib] = {'fiscode': fiscode, 'finished': finished}
+    r1_bib_to_fiscode_map = construct_start_order_to_fiscode_map(first_run_start_order)
 
-    # get second run start order to retrieve second run times
     second_run_start_order = {}
     second_run_start_order = race_data.get("startlist")[0][0].get(run_number)
-    r2_bib_to_fiscode_map = {}
-    if second_run_start_order:
-        for r2_bib, racer in enumerate(second_run_start_order.values()):
-            finished = False
-            for j in range(len(racer.values())):
-                if 'finish' in str( racer[j]):
-                    finished = True
-            fiscode = racer[0]
-            r2_bib_to_fiscode_map[r2_bib] = {'fiscode': fiscode, 'finished': finished}
+    r2_bib_to_fiscode_map = construct_start_order_to_fiscode_map(second_run_start_order)
+    
+    # get third run start order for indoor 3 run slalom races
+    third_run_start_order = {}
+    third_run_start_order = race_data.get("startlist")[0][0].get(2)
+    r3_bib_to_fiscode_map = construct_start_order_to_fiscode_map(third_run_start_order)
     
     # get finish_location from racedef
     # for tech look for second occurance of 'finished'
@@ -496,6 +525,14 @@ def fis_livetiming_scraper(race):
     finish_location = 0
     if second_run_start_order:
         racedef = race_data.get("racedef")[0][run_number]
+        for i, run_info in enumerate(racedef.values()):
+            for j in range(len(run_info.values())):
+                if 'finish' in str( run_info[j] ):
+                    finish_location = i
+    # hacky bug fix - need to get finish_location for tech races to be run after the first run (meaning second_run_start_order is false)
+    # shitty code for now but remove this later if it causes issues. If not, can consolidate w/ the code above
+    else:
+        racedef = race_data.get("racedef")[0][0] # set run_number to 0 here since we're assuming 2nd run hasn't started
         for i, run_info in enumerate(racedef.values()):
             for j in range(len(run_info.values())):
                 if 'finish' in str( run_info[j] ):
@@ -524,7 +561,7 @@ def fis_livetiming_scraper(race):
             starters[fiscode]['r1_time'] = round( int(result[finish_location]) / 1000, 2) # convert from miliseconds to seconds
         else:
             starters[fiscode]['result'] = 9999
-
+    
     # add second run times
     if second_run_start_order:
         results = race_data.get("result")[0].get(run_number)
@@ -548,8 +585,33 @@ def fis_livetiming_scraper(race):
                 else:
                     starters[fiscode]['result'] = 9999
     
+    # add third run times (can refactor later but was lazy and copy/pasted from above and changed a few values)
+    if third_run_start_order:
+        results = race_data.get("result")[0].get(2)
+        if results:
+            for r3_bib, result in results.items():
+                if result is None:
+                    continue
+
+                # with splits / intervals, a dnf can show the first two splits but no finish time
+                if len(result) != finish_location + 1:
+                    continue
+
+                # sometimes, : is included in time, for example: 85530:p2 or 85530:c
+                if ':' in str( result[finish_location] ):
+                    result[finish_location] = result[finish_location].split(':')[0]
+                fiscode = r3_bib_to_fiscode_map[r3_bib]['fiscode']
+                if r3_bib_to_fiscode_map[r3_bib]['finished']:
+                    starters[fiscode]['result'] = round( int(result[finish_location]) / 1000, 2) # convert from miliseconds to seconds
+                    if 'r2_time' in starters[fiscode].keys():
+                        starters[fiscode]['r3_time'] = starters[fiscode]['result'] - starters[fiscode]['r1_time'] - starters[fiscode]['r2_time']
+
+                else:
+                    starters[fiscode]['result'] = 9999
+    
     r1_times = sorted([starters[f]['r1_time'] for f in starters if 'r1_time' in starters[f].keys()])
     r2_times = sorted([starters[f]['r2_time'] for f in starters if 'r2_time' in starters[f].keys()])
+    r3_times = sorted([starters[f]['r3_time'] for f in starters if 'r3_time' in starters[f].keys()])
 
     for fiscode in starters:
         full_name = starters[fiscode]['full_name']
@@ -562,7 +624,12 @@ def fis_livetiming_scraper(race):
         if 'r2_time' in starters[fiscode].keys():
             competitor.r2_time = starters[fiscode]['r2_time']
             competitor.r2_rank = get_rank(competitor.r2_time, r2_times)
+        if 'r3_time' in starters[fiscode].keys():
+            competitor.r3_time = starters[fiscode]['r3_time']
+            competitor.r3_rank = get_rank(competitor.r3_time, r3_times)
         if 'result' not in starters[fiscode].keys() and 'r2_time' not in starters[fiscode].keys():
+            competitor.time = 9999
+        if third_run_start_order and 'r3_time' not in starters[fiscode].keys(): # bug fix - 3rd run dfs were getting skipped
             competitor.time = 9999
         
         competitor.fiscode = fiscode

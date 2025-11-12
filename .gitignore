@@ -1,1 +1,6 @@
 **/.DS_Store
+.aws-sam/
+*.zip
+*template-copy.yaml
+*template.backup.yaml
+pandas-layer/

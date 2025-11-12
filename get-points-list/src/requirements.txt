@@ -2,4 +2,6 @@ pytz
 requests
 bs4
 pymysql
-pandas
+pandas==2.3.1
+numpy
+python-dateutil
