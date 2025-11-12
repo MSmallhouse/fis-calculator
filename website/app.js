@@ -63,7 +63,22 @@ function formSubmitBehavior() {
                             &min-penalty=${minPenalty.value}
                             &event=${eventSelector.value}`
 
-        fetch(requestURL).then(response => response.json())
+        fetch(requestURL)
+            .then(async response => {
+                if (!response.ok) {
+                    let errorMsg = "Something went wrong...";
+                    // look for custom error messages, these are thrown in app.js
+                    // note that the default error message is for status code 500
+                    try {
+                        const errJson = await response.json();
+                        if (response.status !== 500 && errJson && errJson.error) {
+                            errorMsg = errJson.error;
+                        }
+                    } catch (e) {}
+                    throw new Error(errorMsg);
+                }
+                return response.json();
+            })
             .then(data => {
                 loader.style.display = "none";
                 // handle response from Lambda function
@@ -202,9 +217,10 @@ function formSubmitBehavior() {
             })
             .catch(error => {
                 loader.style.display = "none";
+                results.innerHTML = "";
                 console.log("Error: ", error);
                 const header = document.createElement("h4");
-                header.textContent = "Something went wrong...";
+                header.textContent = error.message || "Something went wrong...";
                 results.append(header);
             });
     }
