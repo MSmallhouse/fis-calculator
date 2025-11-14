@@ -171,9 +171,22 @@ select {
   text-align: center;
 }
 
-.contact a {
-  text-decoration: none;
+a {
+  text-decoration: underline;
+  text-decoration-color: white;
   color: white;
+  font-weight: 500;
+}
+
+footer {
+  background-color: #016876;
+  padding: 2px 0;
+  display: flex;
+  justify-content: center;
+}
+
+footer p {
+  padding: 0 10px;
 }
 
 .icon {
@@ -207,10 +220,6 @@ select {
     font-size: 16px;
   }
 
-}
-
-.contact a {
-  font-weight: 600;
 }
 
 .text-center {
