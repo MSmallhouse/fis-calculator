@@ -2,58 +2,56 @@
 layout: default
 title: FIS/USSA Points Calculator
 ---
-<div class="container">
-  <h1>FIS/USSA Points Calculator</h1>
-  <!--
-  <h3>Now working for 3 run Slaloms (hopefully)</h3>
-  -->
-  <h3>New Feature! Use during the first run in SL/GS for predicted scores</h3>
-  <p>Select from the dropdown for races live on the FIS app</p>
-  <div class="collapsible-races">
-    <div>FIS App Live Races&emsp;</div>
-    <svg id="collapsible-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-chevron-down" viewBox="0 0 16 16">
-      <path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"/>
-    </svg>
-  </div>
-  <div class="table-container">
-    <div id="date-picker-container" style="display: none">
-      <button id="prev-day">&lt;&lt;</button>
-      <span id="current-date"></span>
-      <button id="next-day">&gt;&gt;</button>
-    </div>
-    <table class="fis-app-table" style="display: none">
-        <thead>
-          <th>Location</th>
-          <th>Event</th>
-          <th>Gender</th>
-        </thead>
-        <tbody class="fis-app-table-body"></tbody>
-    </table>
-    <div id="table-loader" style="display: none"></div>
-  </div>
-  <p style="font-weight: 600">OR</p>
-  <p style="margin-top: 0">Fill out the form for US races on livetiming and vola livetiming</p>
-  <form id="userInfo">
-    <input type="text" placeholder="paste codex or livetiming url" name="url" id="urlInput" style="margin-top: 0;" required>
-    <select name="minPenalty" id="minPenalty" required>
-      <option value="">level of race</option>
-      <option value="-1,0">USSA</option>
-      <option value="23,8">Open FIS</option>
-      <option value="20,8">National Championship</option>
-      <option value="15,0">Noram/Europa Cup</option>
-      <option value="60,8">Entry League</option>
-      <option value="0,0">World Cup</option>
-      <option value="40,8">Citizen</option>
-    </select>
-    <select name="event" id ="eventSelector" required>
-      <option value="">event</option>
-      <option value="SLpoints">SL</option>
-      <option value="GSpoints">GS</option>
-      <option value="SGpoints">SG</option>
-      <option value="DHpoints">DH</option>
-    </select>
-    <input id = "submitBtn" type="submit" value="Submit" style="margin-bottom: 0;">
-  </form>
-  <div id="loader" style="display: none"></div>
-  <div id="results"></div>
+<h1>FIS/USSA Points Calculator</h1>
+<!--
+<h3>Now working for 3 run Slaloms (hopefully)</h3>
+-->
+<h3>New Feature! Use during the first run in SL/GS for predicted scores</h3>
+<p>Select from the dropdown for races live on the FIS app</p>
+<div class="collapsible-races">
+  <div>FIS App Live Races&emsp;</div>
+  <svg id="collapsible-arrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-chevron-down" viewBox="0 0 16 16">
+    <path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"/>
+  </svg>
 </div>
+<div class="table-container">
+  <div id="date-picker-container" style="display: none">
+    <button id="prev-day">&lt;&lt;</button>
+    <span id="current-date"></span>
+    <button id="next-day">&gt;&gt;</button>
+  </div>
+  <table class="fis-app-table" style="display: none">
+      <thead>
+        <th>Location</th>
+        <th>Event</th>
+        <th>Gender</th>
+      </thead>
+      <tbody class="fis-app-table-body"></tbody>
+  </table>
+  <div id="table-loader" style="display: none"></div>
+</div>
+<p style="font-weight: 600">OR</p>
+<p style="margin-top: 0">Fill out the form for US races on livetiming and vola livetiming</p>
+<form id="userInfo">
+  <input type="text" placeholder="paste codex or livetiming url" name="url" id="urlInput" style="margin-top: 0;" required>
+  <select name="minPenalty" id="minPenalty" required>
+    <option value="">level of race</option>
+    <option value="-1,0">USSA</option>
+    <option value="23,8">Open FIS</option>
+    <option value="20,8">National Championship</option>
+    <option value="15,0">Noram/Europa Cup</option>
+    <option value="60,8">Entry League</option>
+    <option value="0,0">World Cup</option>
+    <option value="40,8">Citizen</option>
+  </select>
+  <select name="event" id ="eventSelector" required>
+    <option value="">event</option>
+    <option value="SLpoints">SL</option>
+    <option value="GSpoints">GS</option>
+    <option value="SGpoints">SG</option>
+    <option value="DHpoints">DH</option>
+  </select>
+  <input id = "submitBtn" type="submit" value="Submit" style="margin-bottom: 0;">
+</form>
+<div id="loader" style="display: none"></div>
+<div id="results"></div>
