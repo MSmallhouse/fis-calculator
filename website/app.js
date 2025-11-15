@@ -29,6 +29,60 @@ function calculatePersonalBestColor(score, points) {
     return Math.min( (multiplier/0.25), 1) * 0.5 + 0.5
 }
 
+function createTableHead(data) {
+    const tableHead = document.createElement("thead");
+
+    const headerRow = document.createElement("tr");
+    headerRow.innerHTML = `
+        <th>Pl</th>
+        <th>Name</th>
+        `;
+    
+    if (data.isStartlist) {
+        headerRow.innerHTML += `
+        <th>Points</th>
+        `
+        tableHead.append(headerRow);
+        return tableHead;
+    }
+
+    // add times for FIS Livetiming
+    if (data.hasRunTimes && !data.isStartlist) {
+        if (data.event == 'SGpoints' || data.event == 'DHpoints') {
+            headerRow.innerHTML += `
+            <th>R1</th>
+            `;
+        } else if (data.areScoresProjections) {
+            headerRow.innerHTML += `
+            <th>R1</th>
+            <th>Projected Total</th>
+            `
+        } else if (data.hasThirdRun) {
+            headerRow.innerHTML += `
+            <th>R1</th>
+            <th>R2</th>
+            <th>R3</th>
+            <th>Total</th>
+            `;
+        } else {
+            headerRow.innerHTML += `
+            <th>R1</th>
+            <th>R2</th>
+            <th>Total</th>
+            `;
+        }
+    }
+
+    const scoreString = data.areScoresProjections ? 'Projected Score' : 'Score'
+    headerRow.innerHTML += `
+        <th>Points</th>
+        <th>${scoreString}</th>
+        `;
+
+    tableHead.append(headerRow);
+    return tableHead;
+}
+
 function formSubmitBehavior() {
     const lambdaURL = "https://hsa35mz4zsbu6nqwlb5jvkk4o40jruqd.lambda-url.us-east-2.on.aws/";
     const url = document.getElementById("urlInput");
@@ -92,47 +146,10 @@ function formSubmitBehavior() {
                 }
 
                 const table = document.createElement("table");
-                const tableHead = document.createElement("thead");
-                const tableBody = document.createElement("tbody");
-                const headerRow = document.createElement("tr");
-                headerRow.innerHTML = `
-                    <th>Pl</th>
-                    <th>Name</th>
-                    `;
-                
-                // add times for FIS Livetiming
-                if (data.hasRunTimes) {
-                    if (data.event == 'SGpoints' || data.event == 'DHpoints') {
-                        headerRow.innerHTML += `
-                        <th>R1</th>
-                        `;
-                    } else if (data.areScoresProjections) {
-                        headerRow.innerHTML += `
-                        <th>R1</th>
-                        <th>Projected Total</th>
-                        `
-                    } else if (data.hasThirdRun) {
-                        headerRow.innerHTML += `
-                        <th>R1</th>
-                        <th>R2</th>
-                        <th>R3</th>
-                        <th>Total</th>
-                        `;
-                    } else {
-                        headerRow.innerHTML += `
-                        <th>R1</th>
-                        <th>R2</th>
-                        <th>Total</th>
-                        `;
-                    }
-                }
-                const scoreString = data.areScoresProjections ? 'Projected Score' : 'Score'
-                headerRow.innerHTML += `
-                    <th>Points</th>
-                    <th>${scoreString}</th>
-                    `;
-                tableHead.append(headerRow);
+                const tableHead = createTableHead(data);
                 table.append(tableHead);
+
+                const tableBody = document.createElement("tbody");
 
                 data.results.forEach(result => {
                     const row = document.createElement("tr");
@@ -144,6 +161,14 @@ function formSubmitBehavior() {
                     nameCell.classList.add("text-break");
                     row.append(placeCell);
                     row.append(nameCell);
+                    if (data.isStartlist) {
+                        const pointsCell = document.createElement("td");
+                        pointsCell.textContent = result.points.toFixed(2);
+                        pointsCell.classList.add("text-center");
+                        row.append(pointsCell);
+                        tableBody.append(row);
+                        return;
+                    }
 
                     if (data.hasRunTimes) {
                         table.classList.add('run-times');
