@@ -60,6 +60,9 @@ class Race:
         self.r1_times = []
         self.r2_times = []
 
+        self.are_scores_projections = False
+        self.is_startlist_only = False
+
     def first_run_projected_scores_adjustment(self):
         self.are_scores_projections = True
         if self.event != "SLpoints" and self.event != "GSpoints":
@@ -109,6 +112,10 @@ class Race:
             connect_to_database(self)
         scrape_results(self)
 
+        if self.is_startlist_only:
+            self.competitors = sorted(self.competitors, key=lambda c: c.bib)
+            return
+            
         self.first_run_projected_scores_adjustment()
 
         starting_racers_points = []
@@ -237,7 +244,7 @@ def handler(event, context):
             is_fis_race = False
             min_penalty = "40"
         race = Race(url, min_penalty, adder, race_event, is_fis_race)
-        #URL = "1504"
+        #URL = "0827"
         #MIN_PENALTY = "60"
         #ADDER = "8"
         #EVENT = "SLpoints"
@@ -257,13 +264,13 @@ def handler(event, context):
                 points_not_found += competitor.full_name + ' '
 
             # score = -1 indicates did not finish or did not start
-            if competitor.score != -1:
+            if competitor.score != -1 or race.is_startlist_only:
                 finishers.append(competitor)
 
         output = [
             {
                 "place": i+1,
-                "place": "" if i > 0 and competitor.time == finishers[i-1].time else i+1,
+                "place": "" if (i > 0 and competitor.time == finishers[i-1].time) and not race.is_startlist_only else i+1,
                 "name": competitor.full_name,
                 "score": competitor.score,
                 "points": competitor.fis_points,
@@ -293,7 +300,8 @@ def handler(event, context):
             "hasRunTimes": True,
             "areScoresProjections": race.are_scores_projections,
             "notFound": points_not_found,
-            "hasThirdRun": 'r3_time' in output[0].keys()
+            "hasThirdRun": 'r3_time' in output[0].keys(),
+            "isStartlist": race.is_startlist_only,
         }
 
         return {

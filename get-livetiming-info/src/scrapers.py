@@ -17,6 +17,7 @@ class Competitor:
         self.score = -1
         self.start_order = 9999
         self.fiscode = 0
+        self.bib = -1
 
     def __str__(self):
         return f"{self.full_name} score: {self.score}"
@@ -463,19 +464,32 @@ def fis_livetiming_scraper(race):
             fiscode = racer[0]
             bib_to_fiscode_map[bib] = {'fiscode': fiscode, 'finished': finished}
         return bib_to_fiscode_map
+    
+    def create_startlist(startlist, starters):
+        race.is_startlist_only = True
+        for bib, racer in enumerate(startlist.values()):
+            fiscode = racer[0]
+            starters[fiscode]['bib'] = bib
+        
+        for fiscode in starters:
+            full_name = starters[fiscode]['full_name']
+            competitor = Competitor(full_name)
+            competitor.fiscode = fiscode
+            competitor.bib = starters[fiscode]['bib']
+            race.competitors.append(competitor)
 
     session = requests.Session()
     server_url = get_server_url()
     race_data = get_race_data(server_url)
     
-    if (not race_data.get("result")
-        or not race_data.get("startlist")):
+    if (not race_data.get("result") and not race_data.get("startlist")):
         raise UserFacingException("Wait for the race to start", status_code=404)
-
+    
     starters = {}
     entered = race_data.get("racers", [])
     for racer in entered.values():
-        # format: fiscode: 'last_name, first_name'
+        # format: fiscode: 
+        #   { full_name : 'last_name, first_name' }
         starters[racer[0]] = {
             'full_name': f'{racer[1]}, {racer[2]}'
         }
@@ -497,11 +511,10 @@ def fis_livetiming_scraper(race):
             did_not_start.append(fiscode)
     for fiscode in did_not_start:
         starters.pop(fiscode)
-    #for racer in entered.values():
-    #    fiscode = racer[0]
-    #    if fiscode not in r1_started:
-    #        print(f'{racer[1]}, {racer[2]}')
-    #        #starters.pop(fiscode)
+
+    if (not race_data.get("result") and race_data.get("startlist")):
+        create_startlist(race_data.get("startlist")[0][0][0], starters)
+        return
 
     run_number = 1
     if race.event == "SGpoints" or race.event == "DHpoints":
