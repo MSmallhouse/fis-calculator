@@ -153,6 +153,7 @@ class Race:
             while self.competitors[i].time == self.competitors[9].time and self.competitors[i].time != 9999 and self.competitors[9].time != 9999:
                 top_ten_finishers.append(self.competitors[i])
                 i += 1
+        
 
         top_ten_sorted_by_points = sorted(top_ten_finishers, key=point_sort)
 
@@ -160,7 +161,15 @@ class Race:
         # C = race points of top 5 ranked racers inside top 10 finishers
         A = 0
         C = 0
+
+        # edge case for less than 5 finishers - add event maximum to A until 5 finish
+        if len(top_ten_finishers) < 5:
+            A += (5 - len(top_ten_finishers)) * (FIS_EVENT_MAXIMUMS[self.event] if self.is_fis_race else USSA_EVENT_MAXIMUMS[self.event])
+
+        counter999 = 0
         for competitor in top_ten_sorted_by_points[:5]:
+            if competitor.fis_points == 999.99:
+                counter999 += 1
             # edge cases for those who finish with sufficiently high points:
             if self.is_fis_race and competitor.fis_points >= FIS_EVENT_MAXIMUMS[self.event]:
                 A += FIS_EVENT_MAXIMUMS[self.event]
@@ -170,6 +179,11 @@ class Race:
             else:
                 A += competitor.fis_points
             C += get_race_points(competitor, self)
+        
+        # edge case, 3+ 999.99 points in the top 5
+        if counter999 >= 3 and self.is_fis_race:
+            self.min_penalty = FIS_EVENT_MAXIMUMS[self.event] * 2
+        
         return A, C
     
     def get_B(self, starting_racers_points):
@@ -244,8 +258,8 @@ def handler(event, context):
             is_fis_race = False
             min_penalty = "40"
         race = Race(url, min_penalty, adder, race_event, is_fis_race)
-        #URL = "0827"
-        #MIN_PENALTY = "60"
+        #URL = "6194"
+        #MIN_PENALTY = "23"
         #ADDER = "8"
         #EVENT = "SLpoints"
         #is_fis_race = True
