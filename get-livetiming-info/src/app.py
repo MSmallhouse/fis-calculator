@@ -171,9 +171,10 @@ class Race:
             if competitor.fis_points == 999.99:
                 counter999 += 1
             # edge cases for those who finish with sufficiently high points:
-            if self.is_fis_race and competitor.fis_points >= FIS_EVENT_MAXIMUMS[self.event]:
+            # also, those with points not found are assigned the event maximum
+            if (self.is_fis_race and competitor.fis_points >= FIS_EVENT_MAXIMUMS[self.event]) or (competitor.fis_points == 1000):
                 A += FIS_EVENT_MAXIMUMS[self.event]
-            elif not self.is_fis_race and competitor.fis_points >= USSA_EVENT_MAXIMUMS[self.event]:
+            elif (not self.is_fis_race and competitor.fis_points >= USSA_EVENT_MAXIMUMS[self.event]) or (competitor.fis_points == 1000):
                 A += USSA_EVENT_MAXIMUMS[self.event]
             # normal case:
             else:
@@ -191,12 +192,15 @@ class Race:
         # make sure to check DNS - time == 9999
         # B = top 5 points at start
         starting_racers_points.sort()
+        for points in starting_racers_points:
+            print(points)
         B = 0
         for points in starting_racers_points[:5]:
             # edge cases for those who finish with sufficiently high points:
-            if self.is_fis_race and points >= FIS_EVENT_MAXIMUMS[self.event]:
+            # also, those with points not found are assigned the event maximum
+            if (self.is_fis_race and points >= FIS_EVENT_MAXIMUMS[self.event]) or (points == 1000):
                 B += FIS_EVENT_MAXIMUMS[self.event]
-            elif not self.is_fis_race and points >= USSA_EVENT_MAXIMUMS[self.event]:
+            elif (not self.is_fis_race and points >= USSA_EVENT_MAXIMUMS[self.event]) or (points == 1000):
                 B += USSA_EVENT_MAXIMUMS[self.event]
             # normal case:
             else:
@@ -258,7 +262,7 @@ def handler(event, context):
             is_fis_race = False
             min_penalty = "40"
         race = Race(url, min_penalty, adder, race_event, is_fis_race)
-        #URL = "6194"
+        #URL = "6195"
         #MIN_PENALTY = "23"
         #ADDER = "8"
         #EVENT = "SLpoints"
