@@ -192,8 +192,6 @@ class Race:
         # make sure to check DNS - time == 9999
         # B = top 5 points at start
         starting_racers_points.sort()
-        for points in starting_racers_points:
-            print(points)
         B = 0
         for points in starting_racers_points[:5]:
             # edge cases for those who finish with sufficiently high points:
