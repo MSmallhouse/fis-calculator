@@ -84,30 +84,10 @@ class Race:
             competitor.time = competitor.r1_time * 2
             self.winning_time = min(self.winning_time, competitor.time)
 
-    def log_url_in_cloudwatch(self):
-        # uses CloudWatch Embedded Metric Format logs to track how many of each url is passed
-        url_clean = str(self.url).strip()
-        emf_log = {
-            "_aws": {
-                "CloudWatchMetrics": [
-                    {
-                        "Namespace": "LambdaURLHits",
-                        "Dimensions": [["URL"]],
-                        "Metrics": [{"Name": "UrlFormSubmission", "Unit": "Count"}]
-                    }
-                ]
-            },
-            "URL": url_clean,
-            "UrlFormSubmission": 1
-        }
-        self.logger.info(json.dumps(emf_log))
-        return
-
     def get_points(self):
         self.logger = logging.getLogger()
         self.logger.setLevel(logging.INFO)
         self.logger.info(f"URL PASSED: {self.url}")
-        self.log_url_in_cloudwatch()
         if self.url_type != 'live-timing':
             connect_to_database(self)
         scrape_results(self)

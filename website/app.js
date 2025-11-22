@@ -101,7 +101,7 @@ function formSubmitBehavior() {
         // Fire Google Analytics event
         gtag('event', 'form_fill', {
             event_category: 'engagement',
-            event_label: 'Points form filled/submitted'
+            event_label: url.value.trim(),
         })
         console.log('GA key event fired');
 
