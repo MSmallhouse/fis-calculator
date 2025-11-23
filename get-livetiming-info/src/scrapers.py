@@ -553,6 +553,9 @@ def fis_livetiming_scraper(race):
 
     # add first run times
     results = race_data.get("result")[0][0]
+    if not results: # bug fix - sometimes results are stored at index 1 and not index 0, could be an error when entered into fis livetiming
+        results = race_data.get("result")[0][1]
+
     for r1_bib, result in results.items():
         if result is None:
             continue
