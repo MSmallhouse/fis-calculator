@@ -28,7 +28,10 @@ def compose_download_url(logger):
 	POINTS_PAGE_URL = "https://www.fis-ski.com/DB/alpine-skiing/fis-points-lists.html"
 	FILE_URL = "https://data.fis-ski.com/fis_athletes/ajax/fispointslistfunctions/export_fispointslist.html?export_csv=true&sectorcode=AL&seasoncode="
 
-	response = requests.get(POINTS_PAGE_URL)
+	headers = {
+		"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+	}
+	response = requests.get(POINTS_PAGE_URL, headers=headers)
 	if response.status_code != 200:
 		logger.info("ERROR: Failed to fetch FIS points list webpage")
 
