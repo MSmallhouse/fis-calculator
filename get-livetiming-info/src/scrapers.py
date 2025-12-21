@@ -24,6 +24,13 @@ class Competitor:
 
 
 def vola_scraper(race):
+#TODO: To rewrite this to be more accurate, look @ following info
+    # From the JS that loads the page (livepublish.timekeepter.skialp.40.0.07.min.js)
+    # Startlist is stored at response["4"]
+    # Results are stored response["0"]
+    # heatlistfields tells where the locations of info are
+    # heatlistvalues gives the actual results
+
     def extract_race_id(url):
         race_id = url.split("_")[1]
         return race_id.split(".")[0]
@@ -211,7 +218,8 @@ def vola_scraper(race):
             full_name = ""
             temp_full_name = ""
             if race.is_fis_race:
-                full_name = add_comma_to_full_name(names_and_start_order[i]['value'])
+                temp_full_name = names_and_start_order[i]['value']
+                full_name = generate_ussa_competitor_name(names_and_start_order[i]['value'])
             else:
                 temp_full_name = names_and_start_order[i]['value']
                 full_name = generate_ussa_competitor_name(names_and_start_order[i]['value'])
@@ -248,7 +256,7 @@ def vola_scraper(race):
                 continue
 
             if race.is_fis_race:
-                full_name = add_comma_to_full_name(full_name)
+                full_name = generate_ussa_competitor_name(full_name)
             else:
                 full_name = generate_ussa_competitor_name(full_name)
 
