@@ -40,12 +40,12 @@ def compose_download_url(logger):
 
 	# need to also get previous list id because the most recent list isn't always for a valid date yet
 	csv_links = [a for a in soup.find_all('a', onclick=True) if 'fct_export_fispointslist_csv' in a['onclick']]
-	onclick_attr = csv_links[0]['onclick']
+	onclick_attr = csv_links[1]['onclick']
 	match = re.search(r"fct_export_fispointslist_csv\(\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*\)", onclick_attr)
 	year = match.group(2)
 	list_id = match.group(3)
 
-	prev_onclick_attr = csv_links[1]['onclick']
+	prev_onclick_attr = csv_links[2]['onclick']
 	match = re.search(r"fct_export_fispointslist_csv\(\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*'([^']*)'\s*\)", prev_onclick_attr)
 	prev_year = match.group(2)
 	prev_list_id = match.group(3)
