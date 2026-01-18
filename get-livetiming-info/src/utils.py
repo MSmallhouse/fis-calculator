@@ -15,7 +15,9 @@ from scrapers import fis_livetiming_scraper
 # who is more likely to be in US races where this website will be used
 NAME_ERROR_FISCODES = {
     "COLLINI, Filippo" : "6293795",
+    "cfiiiilllnoopp" : "6293795",
     "SALA, Tommaso"    : "10001636",
+    "aaalmmoosst"    : "10001636",
     "ROBINSON J., Carter" : "6534063"
 }
 NAME_ERROR_USSA_CODES = {}
@@ -120,7 +122,7 @@ def vola_fis_add_points_to_competitors(race, points_df):
 
         # patch for bug with names
         if competitor.full_name in NAME_ERROR_FISCODES:
-            mask = points_df['Fiscode'] == NAME_ERROR_FISCODES[competitor.full_name]
+            mask = points_df['Fiscode'] == NAME_ERROR_FISCODES[preprocess_name(competitor.full_name)]
             matching_row = points_df[mask]
             competitor.fis_points = matching_row.iloc[0][race.event]
             race.logger.info(f"POSSIBLE ERROR: {competitor.full_name} assigned points of {matching_row.iloc[0][race.event]}")
