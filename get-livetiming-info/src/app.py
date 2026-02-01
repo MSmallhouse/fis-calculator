@@ -48,6 +48,7 @@ class Race:
         self.competitors = []
         self.winning_time = 9999
         self.penalty = 0
+        self.next_year_penalty = 0
 
         self.url_type = ''
         if 'vola' in url:
@@ -112,10 +113,9 @@ class Race:
     def calculate_penalty(self, starting_racers_points):
         A, C = self.get_A_and_C()
         B = self.get_B(starting_racers_points)
-        #uncomment when 8 point adder gets put in, check 1st page download https://www.fis-ski.com/DB/alpine-skiing/fis-points-lists.html
-        #penalty = max(((A+B-C)/10) + self.adder, self.min_penalty)
         penalty = max(((A+B-C)/10), self.min_penalty)
         self.penalty = round(penalty, 2)
+        self.next_year_penalty = round( max(((A+B-C)/10) + self.adder, self.min_penalty), 2 )
         return
 
     def get_A_and_C(self):
@@ -192,6 +192,7 @@ class Race:
                 competitor.score = -1
                 continue
             competitor.score = round(get_race_points(competitor, self) + self.penalty, 2)
+            competitor.next_year_score = round(get_race_points(competitor, self) + self.next_year_penalty, 2)
         return
 
 def time_sort(competitor):
@@ -221,10 +222,10 @@ def handler(event, context):
     try:
         url = event["queryStringParameters"]["url"]
         if url == 'preload':
-            return {
-                "statusCode": 200,
-                "body": json.dumps({"message": "preload successful"})
-            }
+           return {
+               "statusCode": 200,
+               "body": json.dumps({"message": "preload successful"})
+           }
 
         # put this down here so page visits don't trigger logging from the lambda function preload - only form fills
         logger = logging.getLogger()
@@ -237,10 +238,10 @@ def handler(event, context):
         race_event = event["queryStringParameters"]["event"]
 
         if min_penalty < "0":
-            is_fis_race = False
-            min_penalty = "40"
+           is_fis_race = False
+           min_penalty = "40"
         race = Race(url, min_penalty, adder, race_event, is_fis_race)
-        #URL = "6195"
+        #URL = "1841"
         #MIN_PENALTY = "23"
         #ADDER = "8"
         #EVENT = "SLpoints"
@@ -270,6 +271,7 @@ def handler(event, context):
                 "name": competitor.full_name,
                 "score": competitor.score,
                 "points": competitor.fis_points,
+                "score2027": competitor.next_year_score,
                 # only include run time and ranks if they exist
                 **(
                     {
@@ -298,6 +300,7 @@ def handler(event, context):
             "notFound": points_not_found,
             "hasThirdRun": 'r3_time' in output[0].keys(),
             "isStartlist": race.is_startlist_only,
+            "isFisRace": race.is_fis_race,
         }
 
         return {

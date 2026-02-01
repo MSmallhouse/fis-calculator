@@ -78,6 +78,12 @@ function createTableHead(data) {
         <th>Points</th>
         <th>${scoreString}</th>
         `;
+    
+    if (data.isFisRace) {
+        headerRow.innerHTML += `
+            <th>2027 Score</th>
+        `
+    }
 
     tableHead.append(headerRow);
     return tableHead;
@@ -222,17 +228,30 @@ function formSubmitBehavior() {
 
                     const pointsCell = document.createElement("td");
                     const scoreCell = document.createElement("td");
+                    const scoreCell2027 = document.createElement("td");
 
                     pointsCell.textContent = result.points.toFixed(2);
                     pointsCell.classList.add("text-center");
+
                     scoreCell.textContent = result.score.toFixed(2);
                     scoreCell.classList.add("text-center");
                     if (result.score < result.points) {
                         scoreCell.classList.add("personal-best");
                         scoreCell.style.opacity = calculatePersonalBestColor(result.score, result.points);
                     }
+
+                    if (data.isFisRace) {
+                        scoreCell2027.textContent = result.score2027.toFixed(2);
+                        scoreCell2027.classList.add("text-center");
+                        if (result.score2027 < result.points) {
+                            scoreCell2027.classList.add("personal-best");
+                            scoreCell2027.style.opacity = calculatePersonalBestColor(result.score2027, result.points);
+                        }
+                    }
+
                     row.append(pointsCell);
                     row.append(scoreCell);
+                    if (data.isFisRace) row.append(scoreCell2027);
                     tableBody.append(row);
                 });
 

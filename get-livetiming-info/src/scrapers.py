@@ -15,6 +15,7 @@ class Competitor:
         self.time = 9999
         self.fis_points = 1000
         self.score = -1
+        self.next_year_score = -1
         self.start_order = 9999
         self.fiscode = 0
         self.bib = -1
