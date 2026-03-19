@@ -12,6 +12,10 @@ import boto3
 from decimal import Decimal
 import traceback
 
+REQUEST_HEADERS = {
+	"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
+}
+
 def connect_to_dynamo_db(logger): 
 	try:
 		client = boto3.resource('dynamodb')
@@ -28,10 +32,7 @@ def compose_download_url(logger):
 	POINTS_PAGE_URL = "https://www.fis-ski.com/DB/alpine-skiing/fis-points-lists.html"
 	FILE_URL = "https://data.fis-ski.com/fis_athletes/ajax/fispointslistfunctions/export_fispointslist.html?export_csv=true&sectorcode=AL&seasoncode="
 
-	headers = {
-		"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-	}
-	response = requests.get(POINTS_PAGE_URL, headers=headers)
+	response = requests.get(POINTS_PAGE_URL, headers=REQUEST_HEADERS)
 	if response.status_code != 200:
 		logger.info("ERROR: Failed to fetch FIS points list webpage")
 
@@ -71,7 +72,7 @@ def compose_download_url(logger):
 
 def get_points_df(download_url):
 	# this response contains the csv with the most recent points list
-	response = requests.get(download_url).content
+	response = requests.get(download_url, headers=REQUEST_HEADERS).content
 	df = pd.read_csv(io.StringIO(response.decode('utf-8')))
 	df = df.filter(items=["Fiscode", "Lastname", "Firstname", "Competitorname", "DHpoints",
 					      "SLpoints", "GSpoints", "SGpoints", "ACpoints"])
