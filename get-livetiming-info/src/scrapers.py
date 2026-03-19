@@ -5,6 +5,9 @@ import phpserialize
 from exceptions import UserFacingException
 
 TIMES_AS_LETTERS = {"DNF", "DNS", "DSQ", "DQ", "Did Not Finish", "Did Not Start", "Disqualified"}
+REQUEST_HEADERS = {
+	"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
+}
 
 class Competitor:
     def __init__(self, full_name):
@@ -439,7 +442,7 @@ def fis_livetiming_scraper(race):
 
     def get_server_url():
         url = f'https://live.fis-ski.com/general/serverListFull.xml?t={TIMESTAMP}'
-        raw_data = session.get(url).text
+        raw_data = session.get(url, headers=REQUEST_HEADERS).text
         cleaned_data = strip_tags(raw_data)
         parsed_data = phpserialize.loads(cleaned_data.encode(), decode_strings=True)
 
@@ -449,7 +452,7 @@ def fis_livetiming_scraper(race):
         TIMESTAMP = int(time.time() * 1000)
         url = f'{server_url}/al{CODEX}/main.xml?t={TIMESTAMP}'
 
-        response = session.get(url)
+        response = session.get(url, headers=REQUEST_HEADERS)
         if response.status_code == 404:
             raise UserFacingException("Race is not live or not found", status_code=404)
 
