@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  python3.10
+  python3.14
 
   Sample SAM Template for get-points-list
 
@@ -9,7 +9,7 @@ Globals:
   Function:
     Timeout: 900
     MemorySize: 3008
-    Runtime: python3.10
+    Runtime: python3.14
     Architectures:
       - x86_64
 

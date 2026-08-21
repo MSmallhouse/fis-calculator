@@ -1,7 +1,10 @@
 pytz
 requests
 bs4
-pymysql
-pandas==2.3.1
+# 2.3.3 is the first release with cp314 wheels. pandas 3.x is a major release
+# (copy-on-write, new default string dtype) that this code has not been checked
+# against - see the Series.equals diffing in fis_points_download.
+pandas>=2.3.3,<3
 numpy
 python-dateutil
+pypdf
