@@ -19,17 +19,13 @@ Resources:
     Properties:
       Handler: app.lambda_handler
       CodeUri: src/
-      Events:
-        GetPointsList:
-          Type: Api 
-          Properties:
-            Path: /get-points-list
-            Method: get
+      # No event source. The nightly run is an EventBridge Scheduler schedule
+      # (get-fis-points-nightly-run) that invokes this function directly. There
+      # used to be an unauthenticated API Gateway here; nothing called it, and it
+      # was a public trigger for a 900s/3008MB function that scans and rewrites
+      # DynamoDB. Removed 2026-08-21.
 
 Outputs:
-  GetPointsListApi:
-    Description: "API Gateway endpoint URL for Prod stage for GetPointsList function"
-    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/get-points-list/"
   GetPointsListFunction:
     Description: "GetPointsList Lambda Function ARN"
     Value: !GetAtt GetPointsListFunction.Arn
