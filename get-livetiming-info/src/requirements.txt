@@ -1,3 +1,6 @@
 requests
 phpserialize
-pandas==2.3.1
+# 2.3.3 is the first release with cp314 wheels. held below 3.x: pandas 3 changes
+# copy-on-write and the default string dtype, which the DynamoDB lookup paths in
+# utils.py have not been checked against.
+pandas>=2.3.3,<3

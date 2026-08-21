@@ -7,7 +7,7 @@ Globals:
   Function:
     Timeout: 120
     MemorySize: 2048
-    Runtime: python3.10
+    Runtime: python3.14
     Architectures:
       - x86_64
 
