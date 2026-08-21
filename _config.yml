@@ -1,0 +1,29 @@
+# This file is otherwise empty on purpose - the site relies on Jekyll defaults,
+# which is also why templates use relative paths like website/app.js rather than
+# site.baseurl.
+#
+# But with no exclude list Jekyll copies the *entire* repo into the published
+# site, so both lambdas' python source was being served from the live domain
+# (e.g. /get-livetiming-info/src/app.py returned 200). Nothing secret - the repo
+# is public - but the site should only publish the site.
+#
+# Note this replaces Jekyll's built-in exclude list rather than adding to it, so
+# the usual defaults worth keeping are repeated here.
+exclude:
+  # lambdas and their build artifacts
+  - get-points-list/
+  - get-livetiming-info/
+  - alerts/
+  - .aws-sam/
+  # notes written for coding agents, not site visitors
+  - docs/
+  - CLAUDE.md
+  - README.md
+  # jekyll defaults, re-listed because setting `exclude` overrides them
+  - .sass-cache/
+  - .jekyll-cache/
+  - gemfiles/
+  - Gemfile
+  - Gemfile.lock
+  - node_modules/
+  - vendor/
