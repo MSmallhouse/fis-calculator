@@ -1,0 +1,109 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Alerting for fis-calculator. Two paths, because the two failures have
+  different shapes: unhandled calculator errors are rare and emailed as they
+  happen, while name-match misses run to hundreds a day in season and are
+  batched into one daily digest.
+
+  Unlike the other two stacks in this repo, everything here is described in
+  this template - keep it that way.
+
+Parameters:
+  CalculatorLogGroup:
+    Type: String
+    Default: /aws/lambda/get-livetiming-info-getLivetimingInfoFunction-kBjRyLq6345M
+    Description: Log group of the live get-livetiming-info function.
+  AlertTopicArn:
+    Type: String
+    Default: arn:aws:sns:us-east-2:828841719603:Fis_Points_Errors_Topic
+    Description: Existing SNS topic that already emails Matt.
+
+Globals:
+  Function:
+    Runtime: python3.13
+    Architectures:
+      - x86_64
+    MemorySize: 256
+
+Resources:
+
+  # --- immediate: unhandled errors -----------------------------------------
+
+  ErrorNotifierFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: error_notifier.lambda_handler
+      CodeUri: src/
+      Timeout: 30
+      Environment:
+        Variables:
+          TOPIC_ARN: !Ref AlertTopicArn
+          SOURCE_LOG_GROUP: !Ref CalculatorLogGroup
+      Policies:
+        - SNSPublishMessagePolicy:
+            TopicName: !Select [5, !Split [":", !Ref AlertTopicArn]]
+
+  ErrorNotifierLogsPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ErrorNotifierFunction
+      Action: lambda:InvokeFunction
+      Principal: !Sub logs.${AWS::Region}.amazonaws.com
+      SourceArn: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${CalculatorLogGroup}:*
+
+  # matches the generic 500 handler and a dynamodb connection failure, but not
+  # UserFacingException (expected 4xx) or the per-racer name-match lines
+  ErrorSubscriptionFilter:
+    Type: AWS::Logs::SubscriptionFilter
+    DependsOn: ErrorNotifierLogsPermission
+    Properties:
+      LogGroupName: !Ref CalculatorLogGroup
+      FilterPattern: '?"UNHANDLED ERROR" ?"Failed to connect to DynamoDB"'
+      DestinationArn: !GetAtt ErrorNotifierFunction.Arn
+
+  # --- daily: name-match misses --------------------------------------------
+
+  NameMatchDigestFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: digest.lambda_handler
+      CodeUri: src/
+      Timeout: 300
+      Environment:
+        Variables:
+          TOPIC_ARN: !Ref AlertTopicArn
+          SOURCE_LOG_GROUP: !Ref CalculatorLogGroup
+          LOOKBACK_HOURS: '24'
+          TOP_N: '25'
+      Policies:
+        - SNSPublishMessagePolicy:
+            TopicName: !Select [5, !Split [":", !Ref AlertTopicArn]]
+        - Statement:
+            - Effect: Allow
+              Action:
+                - logs:StartQuery
+                - logs:GetQueryResults
+                - logs:StopQuery
+              Resource: '*'
+      Events:
+        Daily:
+          Type: ScheduleV2
+          Properties:
+            Name: fis-calculator-name-match-digest
+            Description: Daily summary of racers whose points could not be matched.
+            # an hour after the points list refresh, so the digest reflects
+            # whatever the overnight ingest fixed
+            ScheduleExpression: cron(15 2 * * ? *)
+            ScheduleExpressionTimezone: America/New_York
+            FlexibleTimeWindow:
+              Mode: FLEXIBLE
+              MaximumWindowInMinutes: 15
+
+Outputs:
+  ErrorNotifierFunction:
+    Description: Emails unhandled calculator errors as they happen.
+    Value: !Ref ErrorNotifierFunction
+  NameMatchDigestFunction:
+    Description: Daily unmatched-racer digest.
+    Value: !Ref NameMatchDigestFunction

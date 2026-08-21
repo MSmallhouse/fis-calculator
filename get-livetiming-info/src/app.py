@@ -250,6 +250,7 @@ def handler(event, context):
 
         race.get_points()
         points_not_found = ""
+        not_found_names = []
         finishers = []
         for competitor in race.competitors:
             # vola ussa races require full name to be scrambled, restore here for nice printing
@@ -259,6 +260,7 @@ def handler(event, context):
             # points = 1000 indicates not found in databas
             if competitor.fis_points == 1000:
                 points_not_found += competitor.full_name + ' '
+                not_found_names.append(competitor.full_name)
 
             # score = -1 indicates did not finish or did not start
             if competitor.score != -1 or race.is_startlist_only:
@@ -292,6 +294,18 @@ def handler(event, context):
             }
             for i, competitor in enumerate(finishers)
         ]
+        if not_found_names:
+            logger.error("NAME_MATCH_MISS " + json.dumps({
+                "url": url,
+                "event": race_event,
+                "min_penalty": event["queryStringParameters"].get("min-penalty", "").strip(),
+                "provider": race.url_type,
+                "is_fis_race": race.is_fis_race,
+                "missed": not_found_names,
+                "missed_count": len(not_found_names),
+                "field_size": len(race.competitors),
+            }))
+
         return_data = {
             "results": output,
             "event": race.event,
@@ -311,7 +325,8 @@ def handler(event, context):
     except UserFacingException as e:
         logger = logging.getLogger()
         logger.setLevel(logging.INFO)
-        logger.error(f"USER RAISED ERROR: {e}\nStack Trace:\n{traceback.format_exc()}")
+        params = (event or {}).get("queryStringParameters") or {}
+        logger.error(f"USER RAISED ERROR: {e}\nparams: {params}\nStack Trace:\n{traceback.format_exc()}")
         return {
             "statusCode": e.status_code,
             "body": json.dumps({"error": str(e)})
@@ -320,7 +335,8 @@ def handler(event, context):
     except Exception as e:
         logger = logging.getLogger()
         logger.setLevel(logging.INFO)
-        logger.error(f"ERROR: {e}\nStack Trace:\n{traceback.format_exc()}")
+        params = (event or {}).get("queryStringParameters") or {}
+        logger.error(f"UNHANDLED ERROR: {e}\nparams: {params}\nStack Trace:\n{traceback.format_exc()}")
 
         return {
             "statusCode": 500,

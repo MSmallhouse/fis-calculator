@@ -5,3 +5,6 @@
 *template.backup.yaml
 pandas-layer/
 _site/
+*.pyc
+.pytest_cache/
+__pycache__/
