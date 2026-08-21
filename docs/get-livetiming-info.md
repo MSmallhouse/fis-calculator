@@ -19,7 +19,7 @@ Five things that cost the most time to rediscover:
    committed once. Grep hits in there are lies. Same for `template-copy.yaml` (python3.9).
 3. **`pandas-layer/` is dead.** 123MB on disk, referenced by nothing, and the deployed function
    reports `Layers: null`. Dependencies are bundled in the 30.8MB function zip. See
-   [Why still python3.10](#why-still-python310).
+   [Runtime](#runtime).
 4. **The site calls a Lambda Function URL, not the API Gateway in `template.yaml`.**
    `https://hsa35mz4zsbu6nqwlb5jvkk4o40jruqd.lambda-url.us-east-2.on.aws/`, hardcoded at
    `website/app.js:93`. The template's API Gateway event is vestigial.
@@ -124,35 +124,33 @@ Two user-facing messages exist, both from the FIS scraper:
 
 ---
 
-## Why still python3.10
+## Runtime
 
-`get-points-list` moved to python3.14 in Aug 2026; this one did not. The reason usually given is
-the `pandas-layer/` directory, whose path is hardcoded to `python/lib/python3.10/site-packages` —
-Lambda only puts the matching runtime version on `sys.path`, so a layer built for 3.10 silently
-stops resolving on any other runtime.
+**python3.14** since Aug 2026 (commit `06f070c`), matching [get-points-list](get-points-list.md).
+`pandas` moved `2.3.1` -> `>=2.3.3,<3`: 2.3.3 is the first release with cp314 wheels, and pandas
+3.x is held off because it changes copy-on-write and the default string dtype, which the DynamoDB
+lookup paths in `utils.py` have not been checked against. `phpserialize` — sdist-only and
+unmaintained since 2016 — installs and round-trips fine on 3.14.
 
-**But the deployed function has `Layers: null`.** Nothing references `pandas-layer/` in any
-template, config, or source file. Dependencies are bundled in the function zip (CodeSize
-30,863,104). So the layer is not actually a blocker — it is 123MB of dead weight that should be
-deleted.
+A note on a claim you may find elsewhere: the `pandas-layer/` directory was long assumed to block
+this upgrade, because its path is hardcoded to `python/lib/python3.10/site-packages`. That was
+wrong. **The deployed function has `Layers: null`** and always has; dependencies are bundled in
+the function zip. `pandas-layer/` is 123MB of dead weight referenced by nothing.
 
-The real work is therefore the same as it was for [get-points-list](get-points-list.md): rebuild
-the bundled dependencies against 3.14 and flip `template.yaml:10`. `pandas` must go to `>=2.3.3`
-for cp314 wheels and should be held `<3`.
+**Verifying a change here without a test suite.** This lambda has none, so the 3.14 move was
+validated by differential run, which is the pattern to reuse:
 
-**Better still, drop pandas from this lambda entirely.** It is used for almost nothing:
+1. Capture the live Function URL's response for a known race as a baseline.
+2. Run the same source under both runtimes in `public.ecr.aws/lambda/python:<ver>` containers
+   (mount `~/.aws` read-only for the DynamoDB lookups) and diff the JSON.
+3. Cover what one race cannot with a synthetic harness — DNFs in the field, the >=3-unscored
+   penalty override, fewer-than-five-finishers padding, both name-lookup paths with `Decimal`
+   values, time parsing, phpserialize.
 
-| use | location |
-|---|---|
-| `pd.DataFrame(list_of_dicts)` | `src/utils.py:94` |
-| one `pd.to_numeric(errors='coerce')` | `src/utils.py:97` |
-| boolean masks + `.iloc[0][col]` | `src/utils.py:111-139`, and the parallel matchers |
+Codex **5279** (Noram/Europa Cup SL, 16 finishers, no unmatched racers) is a known-good case worth
+reusing while it stays live. All three comparisons were byte-identical and 18/18 harness outputs
+matched.
 
-All of it is a dict-of-lists and a loop in plain Python. Removing it drops ~120MB, cuts cold-start
-time (which matters — the site warm-pings on page load), and removes the runtime-upgrade problem
-permanently. It is also the natural moment to fix the O(n²) recompute described below.
-
----
 
 ## Provider dispatch
 
@@ -425,8 +423,8 @@ Selected at `src/utils.py:266-276`:
 | DynamoDB access | implicit SAM role, no policies | policies attached by hand |
 | CORS | **absent entirely** | configured on the Function URL |
 
-Timeout 120s, MemorySize 2048, python3.10, x86_64 (`template.yaml:7-12`). Deployed CodeSize
-30,863,104. Stack `get-livetiming-info`, region `us-east-2`, account `828841719603`.
+Timeout 120s, MemorySize 2048, python3.14, x86_64 (`template.yaml:7-12`). Deployed CodeSize
+46,984,937. Stack `get-livetiming-info`, region `us-east-2`, account `828841719603`.
 `samconfig.toml` carries a stale global `stack_name = "selenium-get-fis-points-list"` that the
 deploy section overrides.
 

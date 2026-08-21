@@ -7,7 +7,7 @@ GitHub Pages plus three AWS SAM stacks in **us-east-2**.
 |---|---|
 | root + `website/` | Jekyll site. Pages live at the **repo root**; `website/` is assets only. Push to `main` publishes. |
 | `get-points-list/` | Nightly ingest of FIS + USSA points lists into DynamoDB. python3.14. |
-| `get-livetiming-info/` | The calculator. Snapshots a live race and scores it. python3.10. |
+| `get-livetiming-info/` | The calculator. Snapshots a live race and scores it. python3.14. |
 | `alerts/` | Error emails + daily name-match digest. The one stack fully described by its template. |
 
 Detail lives in [`docs/`](docs/README.md) — pull in the file you need rather than

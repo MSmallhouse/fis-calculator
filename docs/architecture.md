@@ -45,7 +45,7 @@ flowchart TB
 
     subgraph aws["AWS us-east-2"]
         GPL["get-points-list<br/>nightly 1:10am ET<br/>python3.14"]
-        GLI["get-livetiming-info<br/>on demand, Function URL<br/>python3.10"]
+        GLI["get-livetiming-info<br/>on demand, Function URL<br/>python3.14"]
         T1[("points_list_dynamo_db<br/>~16k FIS racers")]
         T2[("ussa_points_list<br/>~3-20k USSA racers")]
     end
@@ -110,7 +110,7 @@ These will actively mislead you:
 | `get-livetiming-info/_site/` | **a stale copy of `src/`.** All three modules differ from live `src/`. Reading it will give you wrong line numbers and wrong logic. |
 | `_site/`, `.jekyll-cache/` | Jekyll build output, untracked |
 | `.aws-sam/` | SAM build output |
-| `get-livetiming-info/pandas-layer/` | 123MB prebuilt layer, hardcoded to `python/lib/python3.10/site-packages` |
+| `get-livetiming-info/pandas-layer/` | 123MB prebuilt layer, referenced by nothing and attached to nothing — pure dead weight |
 | `*template-copy.yaml`, `*template.backup.yaml` | stale templates (python3.9 / Docker-image era) |
 | `get-points-list/src/Dockerfile` | dead, only referenced by the gitignored backup template; still says `python:3.10` |
 
@@ -298,10 +298,13 @@ Consequences, all of which live in `get-livetiming-info/src/utils.py`:
 | lambda | runtime | packaging |
 |---|---|---|
 | `get-points-list` | **python3.14** | deps bundled in the zip, ~46MB, no layers |
-| `get-livetiming-info` | **python3.10** | pandas via a manually attached layer |
+| `get-livetiming-info` | **python3.14** | deps bundled in the zip, ~45MB, no layers |
 
-The calculator is still on 3.10 because its layer path is hardcoded to
-`python/lib/python3.10/site-packages` and silently stops resolving on any other
-runtime. It uses pandas for almost nothing (a DataFrame, one `to_numeric`, boolean
-masks, `.iloc`), so deleting pandas from that lambda is a better move than
-rebuilding the layer. Details in [`operations.md`](operations.md).
+Both moved to 3.14 in Aug 2026, and both pin `pandas>=2.3.3,<3` — 2.3.3 is the first
+release with cp314 wheels, and pandas 3.x changes copy-on-write and the default string
+dtype, which neither lambda has been checked against.
+
+Removing pandas from the calculator is still worth doing: it uses it for almost nothing
+(a DataFrame, one `to_numeric`, boolean masks, `.iloc`) and dropping it would cut cold
+start and force a fix to the O(n^2) name matching. It was never a blocker for the
+runtime, though — see [`get-livetiming-info.md`](get-livetiming-info.md).

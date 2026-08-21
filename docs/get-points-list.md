@@ -30,7 +30,7 @@ Five things that cost real time to discover:
 | Stack | `get-points-list` (SAM), us-east-2, account `828841719603` |
 | Function | `get-points-list-GetPointsListFunction-D0YVo1592Mhc` |
 | Handler | `app.lambda_handler` (`src/app.py:7`) |
-| Runtime | **python3.14** (get-livetiming-info is still 3.10) |
+| Runtime | **python3.14** |
 | Memory / timeout | 3008 MB / 900 s — actual use is ~271 MB, ~55-120 s |
 | Layers | **none**; dependencies are bundled in the ~46 MB zip |
 | Trigger | EventBridge **Scheduler** `get-fis-points-nightly-run`, `cron(10 1 * * ? *)` America/New_York |
