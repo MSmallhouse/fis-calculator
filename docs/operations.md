@@ -230,11 +230,40 @@ Then read the logs as above. A full FIS refresh of ~8,400 rows takes ~120s again
 
 ---
 
+## Changing a template without `sam deploy`
+
+`sam deploy` is unusable here: SAM CLI 1.142.1 rejects `python3.14`
+(`'python3.14' runtime is not supported`), and even on a newer CLI a local build on
+an arm64 Mac produces macOS wheels. Drive CloudFormation directly instead, pointing
+`CodeUri` at the S3 artifact **already running** so the code and runtime changes are
+no-ops and the update is confined to what you meant to change:
+
+```bash
+# template.yaml edited as you want it; then a copy for the deploy:
+sed 's|CodeUri: src/|CodeUri: s3://<bucket>/<key-already-deployed>.zip|' template.yaml > /tmp/cfn.yaml
+
+aws cloudformation create-change-set --stack-name <stack> \
+  --change-set-name <name> --capabilities CAPABILITY_IAM --template-body file:///tmp/cfn.yaml
+aws cloudformation wait change-set-create-complete --stack-name <stack> --change-set-name <name>
+
+# READ THIS before executing - it lists exactly what will be added/removed/replaced
+aws cloudformation describe-change-set --stack-name <stack> --change-set-name <name> \
+  --query 'Changes[].ResourceChange.{Action:Action,Logical:LogicalResourceId,Replacement:Replacement}' --output table
+
+aws cloudformation execute-change-set --stack-name <stack> --change-set-name <name>
+aws cloudformation wait stack-update-complete --stack-name <stack>
+```
+
+Used this way on 2026-08-21 to delete the unused API Gateway. Hand-added inline
+policies on a CFN-managed IAM role survive an update that does not touch the role —
+verified, `dynamo_db_permissions` and `ussa_points_list_policy` were both intact
+afterwards. This *reduces* drift instead of adding to it.
+
 ## IaC drift
 
 The `template.yaml` files are partial documentation, not truth. The stacks were grown by hand in the console. Missing from IaC entirely:
 
-- **The nightly schedule.** get-points-list's template declares only an API Gateway event.
+- **The nightly schedule.** get-points-list's template declares no event source at all; the EventBridge Scheduler schedule lives outside IaC.
 - **The Function URL** that the website actually calls (get-livetiming-info's template declares only API Gateway).
 - **Both DynamoDB tables**, and **the IAM permissions to reach them** — the implicit SAM role has no DynamoDB policy as written, so it was edited out of band.
 - **The pandas layer** attached to get-livetiming-info (`pandas-layer/` exists in the repo with no `Layers:` entry).
@@ -250,9 +279,9 @@ Account concurrency limit is **400**. DynamoDB tables are both `PAY_PER_REQUEST`
 
 - **`get-livetiming-info` Function URL** — `https://hsa35mz4zsbu6nqwlb5jvkk4o40jruqd.lambda-url.us-east-2.on.aws/`, `AuthType: NONE`, `CORS: *`. Hardcoded in `website/app.js` and served on the live site, so it is public by design. Nothing to hide; it is also the single largest abuse surface.
 - **Neither function has reserved concurrency.** Either can be driven to 400 concurrent executions — get-points-list at 3008 MB / 900s, plus a full DynamoDB scan and thousands of writes per run. Setting `ReservedConcurrentExecutions: 2` on the nightly job is the cheapest guard, plus a billing alarm.
-- **get-points-list has an unused, unauthenticated API Gateway trigger** from its SAM template. Nothing invokes it — the scheduler calls the function directly. It is a free path for anyone to run the expensive function. **Delete the endpoint** rather than rely on it being unadvertised.
+- ~~get-points-list's unauthenticated API Gateway trigger~~ — **removed 2026-08-21** (commit `77f97bf`). It had taken zero requests in 30 days while offering a free path to run the expensive function. The function now has no resource policy at all; the scheduler invokes through its own IAM role.
 - **An orphaned RDS Proxy is still running.** `fis-points-database-proxy`, status `available`, engine MySQL — with **zero RDS instances** behind it. Left over from the pre-DynamoDB era ([architecture.md](architecture.md)). RDS Proxy bills per vCPU-hour whether or not anything uses it. Delete it, and its 317 MB log group.
-- **Four stale API Gateways**: `hello-world`, `sam-app`, `sam-app-2`, `selenium-get-livetiming-info`. Cleanup candidates.
+- **Four stale API Gateways**: `hello-world`, `sam-app`, `sam-app-2`, `selenium-get-livetiming-info`. Cleanup candidates. Do **not** hand-delete `get-livetiming-info` (i22c6hlx33) — its stack owns it.
 - **No log retention** anywhere. Setting 30–90 days would cap indefinite storage growth.
 
 ---
