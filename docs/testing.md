@@ -104,18 +104,15 @@ FIS half is instead smoke-tested by hand when touched — see
 
 ## get-livetiming-info — no tests
 
-`get-livetiming-info/tests/unit/test_handler.py` is **unmodified SAM hello-world
-boilerplate**. It does `from hello_world import app` — a module that does not
-exist in this repo — and asserts `data["message"] == "hello world"`. It fails at
-collection with `ModuleNotFoundError`. Both were deleted on 2026-08-21, along with the matching
-untouched fixture and contains none of the real query parameters, so
-`sam local invoke` against it cannot exercise the handler either.
-
-**Do not mistake those files for coverage.** The equivalent boilerplate was
-deleted from `get-points-list` because it blocked pytest collection; it survives
-here only because nothing else runs in this directory yet.
+`get-livetiming-info/tests/` holds nothing but empty `__init__.py` scaffolding.
+It used to contain SAM hello-world boilerplate — `from hello_world import app`,
+asserting `data["message"] == "hello world"` — which failed at collection with
+`ModuleNotFoundError` and would have blocked any real suite added beside it.
+That file and the matching `events/event.json` fixture were **deleted on
+2026-08-21**, as was the identical pair in `get-points-list`.
 
 So the scoring math and all three scrapers have **zero** automated safety net.
+Nothing here is coverage; the scaffolding is just a place to put a suite.
 
 ### How changes here actually get verified
 
@@ -137,7 +134,7 @@ evidence rather than hope. **Use both, and say which you ran.**
 
 ### The actual workflow
 
-Uncomment the debug block at `get-livetiming-info/src/app.py:244-249`:
+Uncomment the debug block at `get-livetiming-info/src/app.py:288-293`:
 
 ```python
 #URL = "1926"

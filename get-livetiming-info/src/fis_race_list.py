@@ -1,16 +1,13 @@
 """The list of races FIS is currently showing on its live page.
 
-The site used to fetch https://www.fis-ski.com/DB/alpine-skiing/live.html
-straight from the browser. FIS's new backend now answers every request with
-`access-control-allow-origin: https://www.fis-ski.com` regardless of who asked,
-so the browser fetches the bytes and then refuses to hand them to the page - a
-200 that reads as a failure. Nothing client-side can get around that, hence
-fetching here instead: CORS is a browser rule, not a server one.
+Fetched here rather than from the browser because FIS answers every request for
+that page with `access-control-allow-origin: https://www.fis-ski.com` whoever
+asks, so a browser gets the bytes and then refuses to hand them to the page - a
+200 that reads as a failure. CORS is a browser rule, not a server one.
 
-Parsing lives here too, and deliberately does NOT use column positions. FIS has
-reordered those columns at least twice (the event and category cells are
-currently swapped relative to what the old frontend expected), so each cell is
-identified by matching its text against the values we already know.
+Parsing deliberately does NOT use column positions. FIS has reordered those
+columns at least twice, most recently swapping the event and category cells, so
+each cell is identified by matching its text against values we already know.
 """
 
 import re

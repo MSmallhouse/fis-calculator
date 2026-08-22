@@ -45,3 +45,19 @@ guessing. Start at [docs/architecture.md](docs/architecture.md).
   debugging from scratch.
 - `get-livetiming-info/src/app.py` usually has an edited debug block in the working
   tree. That is not a real change; leave it.
+- Pushing needs `gh`: the remote is SSH but no key is loaded, so use
+  `git -c credential.helper='!gh auth git-credential' push https://github.com/MSmallhouse/fis-calculator.git main`.
+
+## Known deferred work
+
+Parked deliberately, not forgotten — see [docs/operations.md](docs/operations.md) and
+the per-subsystem docs for detail:
+
+- **A codex index built from the FIS calendar**, so the race picker can offer any date
+  rather than the handful `live.html` lists. Needs a nightly job, not a per-request
+  scrape — the codex is three hops deep from the calendar.
+- **Remove pandas from `get-livetiming-info`** and fix the O(n²) name matching in
+  `utils.py` — the main timeout risk on large fields.
+- **Stop swallowing exceptions** in the ingest, so rule 1 above stops being true.
+- **`batch_writer`** for the DynamoDB update loop.
+- **`get_B`'s "top 5 out of seed" TODO** — needs Matt's ruling, not a code decision.

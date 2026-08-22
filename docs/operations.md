@@ -86,6 +86,22 @@ Current state (as of Aug 2026):
 
 It was previously `rate(24 hours)` with a `StartDate`. Dropping the `StartDate` (forced — see trap 4) would have re-anchored a `rate()` expression to the moment of the update, turning a nightly job into an afternoon one, hence the cron.
 
+> **Not yet observed firing.** As of the end of the 2026-08-21 session, every invocation in
+> the logs is a manual test — 21:00, 22:00 and 23:00 UTC on Aug 21, i.e. 17:00–19:00 ET. The
+> repaired schedule had not yet reached its first 01:10 ET slot, and the digest had not
+> reached its 02:15 ET slot (the one digest run in the logs is a manual dry run that
+> correctly reported `only 0 affected requests, not emailing`). **The first real scheduled
+> executions are still unverified** — check them before assuming the repair holds:
+>
+> ```bash
+> aws cloudwatch get-metric-statistics --namespace AWS/Lambda --metric-name Invocations \
+>   --dimensions Name=FunctionName,Value=$FN --start-time <ISO> --end-time <ISO> \
+>   --period 3600 --statistics Sum --query 'sort_by(Datapoints,&Timestamp)[].[Timestamp,Sum]' --output text
+> ```
+>
+> A datapoint in the 05:00–06:00 UTC hour is the scheduled run (01:10 ET). Anything in
+> business hours is somebody invoking by hand.
+
 Editing it — every field must be re-supplied:
 
 ```bash
@@ -177,9 +193,17 @@ whatever that ingest just fixed. It suppresses the email entirely at zero record
 **Do not alarm on bare `ERROR` in the calculator log group.** Measured over 14 days:
 1,514 `ERROR` events, of which **1,181 were routine "points not found"** — a normal,
 user-visible condition already surfaced to the user as `notFound`. `USER RAISED ERROR`
-(`get-livetiming-info/src/app.py:314`) is likewise an expected 4xx and is deliberately
+(`get-livetiming-info/src/app.py:372`) is likewise an expected 4xx and is deliberately
 excluded from the subscription filter. An `ERROR` alarm here would fire constantly and
 train you to ignore it.
+
+The live subscription filter is `?"UNHANDLED ERROR" ?"Failed to connect to DynamoDB"`.
+Three call sites emit `UNHANDLED ERROR`, so all three page: the generic 500 handler
+(`app.py:382`), and — added 2026-08-22 — `handle_race_list()` (`app.py:252`), which fires
+when the FIS live page cannot be fetched or parsed. That third one is a **new alert
+source**: a FIS restyle or outage now emails rather than failing silently in the browser.
+Bare requests to the public Function URL deliberately return **400** via
+`UserFacingException`, not 500, precisely so scanner traffic does not page anyone.
 
 Volume is why the digest exists rather than per-event mail: the calculator runs
 **1,046–5,501 invocations/day in peak season**, 13–403/day off-season.
@@ -252,6 +276,81 @@ Then read the logs as above. A full FIS refresh of ~8,400 rows takes ~120s again
 Two caveats on that invoke. It is **not** quite the scheduler's path — the scheduler uses its own IAM role, so if you have changed anything about permissions, confirm that separately with `aws iam simulate-principal-policy --policy-source-arn <scheduler role> --action-names lambda:InvokeFunction --resource-arns <fn arn>`, or by creating a throwaway one-off `at()` schedule with `ActionAfterCompletion: DELETE`. And with `ReservedConcurrentExecutions: 1`, a manual invoke launched while the nightly run is in flight will be **throttled**, not queued — that is intended.
 
 **Prefer this over `sam deploy`.** A CloudFormation update is a live-fire test of the drift below; `update-function-code` touches only the code and leaves the hand-configured role, schedule, and tables alone. Rollback is re-uploading the prior artifact and flipping the runtime back.
+
+### Deploy runbook — get-livetiming-info
+
+Identical recipe, different file list. This one was deployed four times on 2026-08-21/22
+(single-score change, race-list endpoint, alpine sector filter, codex padding), so the
+loop is well worn:
+
+```bash
+cd get-livetiming-info
+OUT=/tmp/gli-build && rm -rf $OUT && mkdir -p $OUT
+docker run --rm --platform linux/amd64 -v "$PWD":/work -v "$OUT":/out -w /work \
+  --entrypoint /bin/sh public.ecr.aws/lambda/python:3.14 -c '
+set -e
+pip install -r src/requirements.txt -t /out > /tmp/pip.log 2>&1 || { tail -20 /tmp/pip.log; exit 1; }
+grep "^Successfully installed" /tmp/pip.log
+cp src/*.py /out/          # app, utils, scrapers, exceptions, fis_race_list
+find /out -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+'
+cd $OUT && zip -qr /tmp/gli.zip .
+```
+
+~45 MB, so S3 again. **No `update-function-configuration` step is needed** — both functions
+are already `python3.14`, so only the code call applies unless you are changing runtime,
+memory or timeout.
+
+Note `boto3` is **not** in `requirements.txt` and must not be: the runtime provides it at
+`/var/runtime/boto3`. That path is not on `sys.path` in a plain `docker run` shell, so an
+`import app` smoke test inside the build container fails with `ModuleNotFoundError: boto3`
+even though the package is correct. Don't chase it.
+
+Verify against a real race rather than trusting the deploy:
+
+```bash
+L=https://hsa35mz4zsbu6nqwlb5jvkk4o40jruqd.lambda-url.us-east-2.on.aws
+curl -sS "$L/?action=races"                                    # race list
+curl -sS "$L/?url=preload"                                     # warm-up path
+curl -sS -o /dev/null -w '%{http_code}\n' "$L/"                # must be 400, not 500
+curl -sS "$L/?url=5279&min-penalty=15,0&event=SLpoints"        # scores a known race
+```
+
+---
+
+## Pushing to GitHub (which is also the site deploy)
+
+Pushing `main` republishes the live site via GitHub Pages, so it is a deploy, not just a
+commit. Two mechanical gotchas:
+
+**`git push` fails from an agent environment.** The remote is SSH
+(`git@github.com:MSmallhouse/fis-calculator.git`) and no key is loaded —
+`ssh-add -l` reports "The agent has no identities", so the push dies with
+`Permission denied (publickey)`. `gh` *is* authenticated (`repo` scope), so route the push
+through it for that one command:
+
+```bash
+git -c credential.helper='!gh auth git-credential' \
+  push https://github.com/MSmallhouse/fis-calculator.git main
+```
+
+This changes neither the remote nor any git config — it is per-invocation only.
+
+**Consequence: the local `origin/main` ref goes stale.** Pushing to an explicit URL does
+not update the tracking ref for `origin`, so `git log origin/main..HEAD` over-reports
+unpushed commits — at the end of this session it listed 17 when the true answer was 0.
+`git fetch origin` will not fix it either; that also goes over SSH and fails the same way.
+Check the real remote head with:
+
+```bash
+gh api repos/MSmallhouse/fis-calculator/commits/main --jq '.sha[0:7]'
+```
+
+**Ordering when a change spans both halves.** Lambda and site must go out together, and
+site-first is the gentler window: a new page against an old lambda degrades (a score
+column reads slightly low, the race list shows its own error state), whereas an old page
+against a new lambda *crashes* the results table. Push, then deploy the lambda
+immediately — the gap was 26 seconds on 2026-08-22.
 
 ---
 

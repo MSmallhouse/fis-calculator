@@ -187,52 +187,56 @@ World Cup               0,0
 Citizen                40,8
 ```
 
-`-1` means "this is a USSA race": the lambda detects it at `app.py:240` with a
+`-1` means "this is a USSA race": the lambda detects it at `app.py:284` with a
 **string** comparison (`min_penalty < "0"`), then forces min penalty 40 and
-`is_fis_race=False`. The `adder` drives the projected next-season score.
+`is_fis_race=False`. The `adder` is added to the penalty itself — see
+[One score, not two](#one-score-not-two).
 
-Validation is thin: HTML5 `required` plus an empty-check at `app.js:115-117` that
-silently returns. A fuller `validateForm()` sits commented out at `app.js:450-476`.
+Validation is thin: HTML5 `required` plus an empty-check at `app.js:111-113` that
+silently returns. A fuller `validateForm()` sits commented out at `app.js:399-424`.
 
-**Known wart:** the request URL at `app.js:122-124` is built with a multi-line
+**Known wart:** the request URL at `app.js:118-120` is built with a multi-line
 template literal, so literal newlines and indentation are embedded in the query
 string before `&min-penalty` and `&event`. It works only because the whitespace
 lands inside the preceding value and the backend tolerates it.
 
 ### Two entry paths
 
-**Path A — pick a live race off the FIS app list.** `app.js:318` does a
-**a call to the calculator lambda's `?action=races`**, which fetches and parses
-the FIS live page server-side and returns JSON. Clicking a row
-autofills all three form fields from row attributes and auto-submits
-(`app.js:364-372`).
+**Path A — pick a race off the FIS list.** `getFisAppRaces` (`app.js:259`) calls the
+calculator lambda's `?action=races`, which fetches and parses the FIS live page
+server-side and returns JSON. The page filters that list to the selected date and
+renders a row per race; clicking one autofills all three form fields from row
+attributes and auto-submits (`app.js:307-314`).
 
-This scrape is brittle in three ways worth knowing before you debug it:
+Worth knowing before you debug it:
 
 - **Why it moved server-side (Aug 2026):** FIS's new backend returns a hardcoded
   `access-control-allow-origin: https://www.fis-ski.com` for every caller, so the
   browser fetched the page and then refused to hand it to the script — a 200 that
   presents as a failure. No client-side workaround exists. Separately, the positional
   `.split-row__item` indices had drifted again (event and category were swapped), so
-  the parser now matches cell text against the known category codes and event names
-  instead of counting columns.
-- **No `.catch()`** on the fetch chain. A failure leaves the loader spinning
-  forever with no error shown.
-- Two lookup tables must stay in sync with the form dropdown:
-  The category→penalty table now lives in `get-livetiming-info/src/fis_race_list.py`
-  as `CATEGORY_PENALTIES`, since the parser needs those codes to identify the cell.
-  `app.js:275-306`) and `eventNameToCategory` (keyed on FIS's English display
-  strings — "Slalom", "Giant Slalom", "Super G", "Downhill", "Downhill
-  Training", `app.js:307-313`). An unknown category yields `undefined` with no
-  fallback; parallel and team events are unmapped.
+  the parser matches cell text against known category codes and event names instead
+  of counting columns. Details in
+  [get-livetiming-info](get-livetiming-info.md#the-alpine-sector-filter-do-not-remove).
+- **The lookup tables moved with it.** `raceCategoryToPenalty` and
+  `eventNameToCategory` are gone from `app.js`; the lambda returns `minPenalty` and
+  `eventCode` ready to use. `CATEGORY_PENALTIES`
+  (`get-livetiming-info/src/fis_race_list.py:38-50`) is the single source of truth and
+  must stay in sync with the dropdown at `index.html:37-43`.
+- **The date picker only filters what FIS lists.** `live.html` ignores date parameters
+  and carries a short forward window — two races in late Aug 2026. A date with nothing
+  on it renders "No FIS races listed for this date." rather than an empty table, and
+  that is not a bug.
+- There *is* a `.catch()` now (`app.js:316-322`); a failure shows a message instead of
+  leaving the loader spinning forever.
 
 **Path B — manual entry.** Paste a live-timing or Vola URL, or a codex, choose
 level and event, submit.
 
 ### Rendering
 
-`app.js:126-269` builds a table from scratch. Column set varies by mode
-(`createTableHead`, `app.js:32-90`):
+`app.js:122-257` builds a table from scratch. Column set varies by mode
+(`createTableHead`, `app.js:35-87`):
 
 | mode | columns |
 |---|---|
@@ -243,9 +247,9 @@ level and event, submit.
 | normal | Pl, Name, R1, R2, Total, Points, Score |
 
 Scores beating the racer's current points get class `personal-best`, with opacity
-scaled by `calculatePersonalBestColor` (`app.js:25-30`, darkest at a 25%
+scaled by `calculatePersonalBestColor` (`app.js:28-33`, darkest at a 25%
 improvement). If some racers' points weren't found, a "results might be off,
-points not found for:" warning is prepended (`app.js:145-152`). Results
+points not found for:" warning is prepended (`app.js:141-148`). Results
 `scrollIntoView` on completion.
 
 ### One score, not two
@@ -334,7 +338,7 @@ Consequences, all of which live in `get-livetiming-info/src/utils.py`:
 | lambda | runtime | packaging |
 |---|---|---|
 | `get-points-list` | **python3.14** | deps bundled in the zip, ~46MB, no layers |
-| `get-livetiming-info` | **python3.14** | deps bundled in the zip, ~47MB, no layers |
+| `get-livetiming-info` | **python3.14** | deps bundled in the zip, ~47.5MB, no layers |
 
 Both moved to 3.14 in Aug 2026, and both pin `pandas>=2.3.3,<3` — 2.3.3 is the first
 release with cp314 wheels, and pandas 3.x changes copy-on-write and the default string

@@ -45,7 +45,7 @@ penalty     = max((A + B - C) / 10, min_penalty)
 
 ## F-factors
 
-`event_multiplier`, set in `Race.__init__` (`src/app.py:34-45`):
+`event_multiplier`, set in `Race.__init__` (`src/app.py:35-46`):
 
 | event | F | `is_tech_race` |
 |---|---|---|
@@ -55,7 +55,7 @@ penalty     = max((A + B - C) / 10, min_penalty)
 | `DHpoints` | 1250 | False |
 | `ACpoints` | 1360 | **True — see below** |
 
-`is_tech_race` defaults to `True` at `src/app.py:33` and is only set `False` inside the SG and DH
+`is_tech_race` defaults to `True` at `src/app.py:34` and is only set `False` inside the SG and DH
 branches. **`ACpoints` therefore keeps `is_tech_race = True`**, which looks unintended — alpine
 combined is not a tech race. It has no live effect because `ACpoints` is not offered in the form
 (`index.html:48-52`), but the branch exists and would be wrong if it were ever exposed.
@@ -63,7 +63,7 @@ combined is not a tech race. It has no live effect because `ACpoints` is not off
 
 ## Race points
 
-`get_race_points` (`src/app.py:205-207`):
+`get_race_points` (`src/app.py:206-208`):
 
 ```python
 race_points = ((competitor.time / race.winning_time) - 1) * race.event_multiplier
@@ -71,11 +71,11 @@ return round(race_points, 2)
 ```
 
 Rounded to 2dp. `winning_time` is maintained incrementally by the scrapers as the minimum finishing
-time seen, starting from the sentinel `9999` (`src/app.py:49`).
+time seen, starting from the sentinel `9999` (`src/app.py:50`).
 
 ## Penalty
 
-`calculate_penalty` (`src/app.py:113-119`):
+`calculate_penalty` (`src/app.py:113-121`):
 
 ```python
 A, C = self.get_A_and_C()
@@ -87,7 +87,9 @@ self.penalty = round(max(((A+B-C)/10) + self.adder, self.min_penalty), 2)
 
 Note where `adder` lands: **inside** the `max`, added to the computed value
 before the floor is applied — not added afterwards. So a race that bottoms out at `min_penalty`
-gets the same value for both, rather than `min_penalty + adder`.
+floors the adder-inclusive figure, rather than producing `min_penalty + adder`. A category whose
+computed penalty falls below its minimum therefore lands exactly on the minimum — Citizen computes
+29.32 + 8 and still reports 40.
 
 Until Aug 2026 there were two penalties — one with the adder, one without — surfaced as `score` and `score2027`. The 2027 season made the adder unconditional, so there is now a single `penalty` and a single `score`. Categories with `adder: 0` (Noram/Europa Cup, World Cup, USSA) are unaffected; the `8`-adder categories score up to 8 points higher than they used to.
 [get-livetiming-info](get-livetiming-info.md).
@@ -96,24 +98,24 @@ Until Aug 2026 there were two penalties — one with the adder, one without — 
 
 ## A, B, and C
 
-### A and C — `get_A_and_C`, `src/app.py:121-168`
+### A and C — `get_A_and_C`, `src/app.py:123-170`
 
-1. Sort all competitors by time (`src/app.py:122`, `time_sort`). DNFs sort last at `9999`.
-2. Take the first 10, **skipping any with `time == 9999`** (`src/app.py:124-127`). Note this uses
+1. Sort all competitors by time (`src/app.py:124`, `time_sort`). DNFs sort last at `9999`.
+2. Take the first 10, **skipping any with `time == 9999`** (`src/app.py:126-129`). Note this uses
    `continue`, so a DNF inside the first ten shrinks the group rather than pulling in an
    eleventh finisher.
-3. **Tie for 10th** (`src/app.py:131-135`): everyone tied on time with the 10th-place racer is also
+3. **Tie for 10th** (`src/app.py:133-137-137`): everyone tied on time with the 10th-place racer is also
    included, per FIS rules. Guarded against `9999` on both sides. This walks forward from index 10
    without a bounds check — safe only because the loop condition fails at the end of a sorted list
    with distinct times, but it is a latent `IndexError` if every racer shares a time.
-4. Re-sort that group by points (`src/app.py:138`, `point_sort`).
+4. Re-sort that group by points (`src/app.py:140`, `point_sort`).
 5. `A` = sum of the 5 best points in the group. `C` = sum of their **race points**
-   (`src/app.py:150-162`).
+   (`src/app.py:152-164`).
 
-`point_sort` (`src/app.py:202-203`) is `(fis_points, -time)` — **on a points tie, the slower racer
+`point_sort` (`src/app.py:203-204`) is `(fis_points, -time)` — **on a points tie, the slower racer
 sorts first**, per FIS rules. The negation is the whole trick; don't "simplify" it.
 
-### B — `get_B`, `src/app.py:170-186`
+### B — `get_B`, `src/app.py:172-188`
 
 Sum of the 5 lowest points among **all starters**. The starter list is built at
 `src/app.py:102-107`, excluding anyone whose points came back as `-1`.
@@ -126,7 +128,7 @@ def get_B(self, starting_racers_points):
 
 **This TODO is live.** Per the rules, `B` should be the best 5 in the *seed*, not the best 5 among
 everyone who started. The scrapers do not currently capture start order for Vola
-(a matching TODO sits at `src/scrapers.py:215-216`), so the information needed isn't there yet.
+(a matching TODO sits at `src/scrapers.py:214-215`), so the information needed isn't there yet.
 This is the most likely source of a systematic discrepancy against hand-calculated results —
 check it first if Matt reports scores that are close but consistently off.
 
@@ -136,7 +138,7 @@ check it first if Matt reports scores that are close but consistently off.
 
 A cap applied to any individual racer's points inside both `A` and `B`.
 
-| event | FIS (`src/app.py:10-16`) | USSA (`src/app.py:17-23`) |
+| event | FIS (`src/app.py:11-17`) | USSA (`src/app.py:18-24`) |
 |---|---|---|
 | `SLpoints` | 165 | 360 |
 | `GSpoints` | 220 | 530 |
@@ -144,7 +146,7 @@ A cap applied to any individual racer's points inside both `A` and `B`.
 | `DHpoints` | 330 | 820 |
 | `ACpoints` | 270 | 660 |
 
-Selected by `race.is_fis_race`. Applied at `src/app.py:155-158` (in `A`) and `src/app.py:179-182`
+Selected by `race.is_fis_race`. Applied at `src/app.py:157-160` (in `A`) and `src/app.py:181-184`
 (in `B`), in both cases as: if the racer's points are `>= maximum`, **or** the racer's points are
 exactly `1000`, substitute the maximum.
 
@@ -166,10 +168,10 @@ Three magic numbers flow through the calculation. Knowing which is which saves r
 | `999.99` | racer is in the database but **has no points yet** | `src/utils.py:136-139` and siblings |
 | `-1` | stored in DynamoDB to mean unscored | written by [get-points-list](get-points-list.md) |
 | `9999` | time sentinel: DNF, DNS, or DSQ | `src/scrapers.py:18`, `time_to_float` |
-| `-1` (score) | did not finish — filtered from output | `src/app.py:192` |
+| `-1` (score) | did not finish — filtered from output | `src/app.py:194` |
 
 `1000` is the initial value on every `Competitor`, so "not found" is really "nothing ever
-overwrote it". Those names are collected into the `notFound` response field (`src/app.py:262-263`)
+overwrote it". Those names are collected into the `notFound` response field (`src/app.py:306-307`)
 and shown as a warning above the results table.
 
 ### The USSA wrinkle
@@ -189,7 +191,7 @@ one of them counts toward the threshold. See [get-points-list](get-points-list.m
 
 ### Fewer than 5 finishers
 
-`src/app.py:146-147`. Pads `A` with one event maximum per missing finisher:
+`src/app.py:148-149`. Pads `A` with one event maximum per missing finisher:
 
 ```python
 if len(top_ten_finishers) < 5:
@@ -198,7 +200,7 @@ if len(top_ten_finishers) < 5:
 
 ### Three or more racers at 999.99 in the top 5
 
-`src/app.py:149-152`, `:164-166`. Counts how many of the best-5-by-points are unscored, and if 3 or
+`src/app.py:151-154`, `:166-168`. Counts how many of the best-5-by-points are unscored, and if 3 or
 more:
 
 ```python
@@ -216,13 +218,13 @@ Whether that gating is intended is a question for Matt.
 
 Normalized to a single representation everywhere: `time = 9999`.
 
-- Set by `time_to_float` (`src/scrapers.py:671-685`) when the time is empty, in
+- Set by `time_to_float` (`src/scrapers.py:678-692`) when the time is empty, in
   `TIMES_AS_LETTERS` (`{"DNF","DNS","DSQ","DQ","Did Not Finish","Did Not Start","Disqualified"}`,
   `src/scrapers.py:7`), or doesn't start with a digit or colon.
-- Excluded from the top-10 group (`src/app.py:125-126`).
-- Given `score = -1` in `assign_scores` (`src/app.py:191-193`), which
+- Excluded from the top-10 group (`src/app.py:127-128`).
+- Given `score = -1` in `assign_scores` (`src/app.py:193-195`), which
   is why that attribute keeps its `-1` initial value.
-- Filtered out of the response at `src/app.py:266`.
+- Filtered out of the response at `src/app.py:310`.
 
 Each scraper also has provider-specific DNF detection before this point — see
 [get-livetiming-info](get-livetiming-info.md).
@@ -278,13 +280,13 @@ them.
 
 | issue | location | note |
 |---|---|---|
-| `B` uses all starters, not the seed | `src/app.py:171` | live TODO; needs start order from the scrapers |
-| `is_tech_race` stays `True` for `ACpoints` | `src/app.py:44-45` | latent; AC not exposed in the form |
-| `counter999` override is FIS-only | `src/app.py:165` | but USSA races are likelier to hit the condition |
-| duplicate `place` key | `src/app.py:271-272` | first is dead code |
+| `B` uses all starters, not the seed | `src/app.py:173` | live TODO; needs start order from the scrapers |
+| `is_tech_race` stays `True` for `ACpoints` | `src/app.py:45-46` | latent; AC not exposed in the form |
+| `counter999` override is FIS-only | `src/app.py:167` | but USSA races are likelier to hit the condition |
+| duplicate `place` key | `src/app.py:358-316` | first is dead code |
 | no tests at all | — | see [testing](testing.md) |
 
 Two `IndexError`s that used to sit in this table were **fixed 2026-08-21** (commit `040816e`): the
-unbounded tie-for-10th walk (`src/app.py:133`, now length-guarded) and `hasThirdRun` reading
-`output[0]` on an empty field (`src/app.py:315`, now `bool(output) and ...`). Both reached users as
+unbounded tie-for-10th walk (`src/app.py:133-137`, now length-guarded) and `hasThirdRun` reading
+`output[0]` on an empty field (`src/app.py:358`, now `bool(output) and ...`). Both reached users as
 a generic 500. Details in [get-livetiming-info](get-livetiming-info.md#fixed-crashes-worth-knowing-about).
