@@ -286,6 +286,15 @@ Account concurrency limit is **400**. DynamoDB tables are both `PAY_PER_REQUEST`
 
 ---
 
+### The budget does not stop anything
+
+There is a $15/month AWS Budget with alerts at 85% actual, 100% actual and 100%
+forecasted, but **no budget actions** — and AWS has no account-level spend cap for
+standard accounts. It is a smoke detector, not a sprinkler: spend continues past the
+limit and you get an email. Adding a budget action is deliberately rejected, since that
+is what would take the live site down at a threshold. Spend is controlled by reserved
+concurrency instead.
+
 ## When something looks broken
 
 Work down this list; each step rules out a whole class of cause.
