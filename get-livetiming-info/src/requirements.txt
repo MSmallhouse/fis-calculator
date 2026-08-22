@@ -4,3 +4,4 @@ phpserialize
 # copy-on-write and the default string dtype, which the DynamoDB lookup paths in
 # utils.py have not been checked against.
 pandas>=2.3.3,<3
+bs4

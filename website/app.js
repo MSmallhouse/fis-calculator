@@ -10,6 +10,9 @@ document.addEventListener('DOMContentLoaded', function() {
     //toggleHeaderOnScroll();
 });
 
+// used by both the scoring form and the FIS race list
+const lambdaURL = "https://hsa35mz4zsbu6nqwlb5jvkk4o40jruqd.lambda-url.us-east-2.on.aws/";
+
 function formatDatestring(date) {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0') // months are zero-indexed
@@ -84,7 +87,6 @@ function createTableHead(data) {
 }
 
 function formSubmitBehavior() {
-    const lambdaURL = "https://hsa35mz4zsbu6nqwlb5jvkk4o40jruqd.lambda-url.us-east-2.on.aws/";
     const url = document.getElementById("urlInput");
     const eventSelector = document.getElementById("eventSelector");
     const minPenalty = document.getElementById("minPenalty");
@@ -255,96 +257,53 @@ function formSubmitBehavior() {
 }
 
 function getFisAppRaces(dateString) {
-    const raceCategoryToPenalty = {
-        'OWG': '0,0',
-        'WC': '0,0',
-        'WSC': '0,0',
-        'COM': '0,0',
-        'WQUA': '0,0',
-        'ANC': '15,0',
-        'EC': '15,0',
-        'ECOM': '15,0',
-        'FEC': '15,0',
-        'NAC': '15,0',
-        'SAC': '15,0',
-        'UVS': '15,0',
-        'WJC': '15,0',
-        'EQUA': '23,0',
-        'NC': '20,8',
-        'AWG': '23,8',
-        'CISM': '23,8',
-        'CIT': '40,8',
-        'CITWC': '40,8',
-        'CORP': '23,8',
-        'EYOF': '23,8',
-        'FIS': '23,8',
-        'FQUA': '23,8',
-        'JUN': '23,8',
-        'NJC': '23,8',
-        'NJR': '23,8',
-        'UNI': '23,8',
-        'YOG': '23,8',
-        'ENL': '60,8',
-        'TRA': '0,0',
-    };
-    const eventNameToCategory = {
-        'Slalom': 'SLpoints',
-        'Giant Slalom': 'GSpoints',
-        'Super G': 'SGpoints',
-        'Downhill': 'DHpoints',
-        'Downhill Training': 'DHpoints',
-    }
     const fisAppTableBody = document.querySelector('.fis-app-table-body');
     const tableLoader = document.getElementById('table-loader');
 
     fisAppTableBody.innerHTML = "";
-    fetch('https://www.fis-ski.com/DB/alpine-skiing/live.html')
-        .then(response => response.text())
-        .then(html => {
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(html, 'text/html');
-            const raceRows = doc.querySelectorAll('.g-row');
 
+    // This used to fetch https://www.fis-ski.com/DB/alpine-skiing/live.html and
+    // scrape it here. FIS's new backend answers every request with
+    // `access-control-allow-origin: https://www.fis-ski.com` no matter who asks,
+    // so the browser fetches the page and then refuses to hand it over - a 200
+    // that reads as a failure. The lambda fetches and parses it instead, and
+    // returns the race already matched to a codex, event and penalty.
+    fetch(`${lambdaURL}?action=races`)
+        .then(response => {
+            if (!response.ok) throw new Error(`race list unavailable (${response.status})`);
+            return response.json();
+        })
+        .then(data => {
             tableLoader.style.display = 'none';
-            raceRows.forEach(row => {
-                const splitRowItems = row.querySelectorAll('.split-row__item');
-                const codex = splitRowItems[1].textContent.trim();
-                const location = splitRowItems[2].textContent.trim();
-                const displayDate = row.querySelector('.timezone-date').textContent.trim();
-                const raceDate = row.querySelector('.timezone-date').getAttribute('data-date');
-                const countryCode = row.querySelector('.country__name-short').textContent;
-                const raceCategory = splitRowItems[5].textContent.trim();
-                const event = splitRowItems[6].textContent.trim();
-                const gender = row.querySelector('.gender__item').textContent;
 
-                const live = row.querySelector('.live__content');
-                let isLive = ''
-                if (live) {
-                    isLive = live.textContent === 'live' ? 'Y' : 'N';
-                }
+            const races = (data.races || []).filter(race => race.date === dateString);
+            if (races.length === 0) {
+                fisAppTableBody.innerHTML =
+                    `<tr><td colspan="3">No FIS races listed for this date.</td></tr>`;
+                return;
+            }
 
-                if (raceDate === dateString) {
-                    const tableRow = document.createElement('tr');
-                    tableRow.className = 'fis-table-row'
-                    tableRow.setAttribute('codex', codex);
-                    tableRow.setAttribute('category', raceCategoryToPenalty[raceCategory]);
-                    tableRow.setAttribute('event', eventNameToCategory[event]);
-                    tableRow.innerHTML = `
-                        <td>${countryCode}<br>${location}</td>
-                        <td>${event}</td>
-                        <td>${gender}</td>
-                    `;
-                    fisAppTableBody.appendChild(tableRow);
-                }
+            races.forEach(race => {
+                const tableRow = document.createElement('tr');
+                tableRow.className = 'fis-table-row';
+                tableRow.setAttribute('codex', race.codex);
+                tableRow.setAttribute('category', race.minPenalty);
+                tableRow.setAttribute('event', race.eventCode);
+                tableRow.innerHTML = `
+                    <td>${race.country}<br>${race.location}</td>
+                    <td>${race.event}</td>
+                    <td>${race.gender}</td>
+                `;
+                fisAppTableBody.appendChild(tableRow);
             });
-            const tableRows = document.querySelectorAll('.fis-table-row');
+
             const url = document.getElementById("urlInput");
             const eventSelector = document.getElementById("eventSelector");
             const minPenalty = document.getElementById("minPenalty");
             const submitBtn = document.getElementById("submitBtn");
             const form = document.getElementById("userInfo");
 
-            tableRows.forEach(row => {
+            document.querySelectorAll('.fis-table-row').forEach(row => {
                 row.addEventListener("click", () => {
                     url.value = row.getAttribute('codex');
                     eventSelector.value = row.getAttribute('event');
@@ -353,6 +312,13 @@ function getFisAppRaces(dateString) {
                     form.scrollIntoView({behavior: 'smooth'});
                 });
             });
+        })
+        .catch(error => {
+            // without this the loader spins forever and the failure is invisible
+            tableLoader.style.display = 'none';
+            fisAppTableBody.innerHTML =
+                `<tr><td colspan="3">Could not load the FIS race list right now.</td></tr>`;
+            console.error('getFisAppRaces:', error);
         });
 }
 

@@ -42,7 +42,7 @@ flowchart TB
         LT["live-timing.com<br/>pipe-delimited AJAX feed"]
         VOLA["Vola<br/>vola.ussalivetiming.com JSON"]
         FISLIVE["FIS livetiming<br/>live.fis-ski.com PHP-serialized"]
-        FISAPP["fis-ski.com/DB/alpine-skiing/live.html<br/>(scraped by the BROWSER, not a lambda)"]
+        FISAPP["fis-ski.com/DB/alpine-skiing/live.html<br/>(scraped by the lambda; CORS blocks the browser)"]
     end
 
     subgraph aws["AWS us-east-2"]
@@ -62,7 +62,7 @@ flowchart TB
     GPL --> T2
 
     BROWSER -->|"GET ?url=&min-penalty=&event="| GLI
-    FISAPP -.->|"cross-origin fetch<br/>+ DOMParser"| BROWSER
+    FISAPP -.->|"scraped server-side<br/>action=races"| GLI
 
     LT --> GLI
     VOLA --> GLI
@@ -202,21 +202,25 @@ lands inside the preceding value and the backend tolerates it.
 ### Two entry paths
 
 **Path A — pick a live race off the FIS app list.** `app.js:318` does a
-**cross-origin fetch of `https://www.fis-ski.com/DB/alpine-skiing/live.html`
-from the user's browser**, then parses it with `DOMParser`. Clicking a row
+**a call to the calculator lambda's `?action=races`**, which fetches and parses
+the FIS live page server-side and returns JSON. Clicking a row
 autofills all three form fields from row attributes and auto-submits
 (`app.js:364-372`).
 
 This scrape is brittle in three ways worth knowing before you debug it:
 
-- **Positional indices** into `.split-row__item`: `[1]` codex, `[2]` location,
-  `[5]` category, `[6]` event (`app.js:328-334`). Plus the class names `.g-row`,
-  `.timezone-date`, `.country__name-short`, `.gender__item`, `.live__content`.
-  Any FIS restyle breaks it.
+- **Why it moved server-side (Aug 2026):** FIS's new backend returns a hardcoded
+  `access-control-allow-origin: https://www.fis-ski.com` for every caller, so the
+  browser fetched the page and then refused to hand it to the script — a 200 that
+  presents as a failure. No client-side workaround exists. Separately, the positional
+  `.split-row__item` indices had drifted again (event and category were swapped), so
+  the parser now matches cell text against the known category codes and event names
+  instead of counting columns.
 - **No `.catch()`** on the fetch chain. A failure leaves the loader spinning
   forever with no error shown.
 - Two lookup tables must stay in sync with the form dropdown:
-  `raceCategoryToPenalty` (33 FIS category codes → penalty pairs,
+  The category→penalty table now lives in `get-livetiming-info/src/fis_race_list.py`
+  as `CATEGORY_PENALTIES`, since the parser needs those codes to identify the cell.
   `app.js:275-306`) and `eventNameToCategory` (keyed on FIS's English display
   strings — "Slalom", "Giant Slalom", "Super G", "Downhill", "Downhill
   Training", `app.js:307-313`). An unknown category yields `undefined` with no

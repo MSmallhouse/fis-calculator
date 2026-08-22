@@ -6,6 +6,7 @@ import traceback
 from utils import connect_to_database
 from utils import scrape_results
 from exceptions import UserFacingException
+from fis_race_list import get_race_list
 
 FIS_EVENT_MAXIMUMS = {
     "SLpoints": 165,
@@ -217,17 +218,60 @@ def float_to_time_string(seconds):
         return f'{secs:.2f}'
 
 def handler(event, context):
+    """Router. Three things are asked of this function:
+
+      action=races  -> the races FIS is currently listing (see fis_race_list)
+      url=preload   -> nothing, just warms the container on page load
+      otherwise     -> scrape and score one race, which is the real job
+
+    `url=preload` predates the action parameter and is kept so pages already in
+    someone's browser keep working.
+    """
+    params = (event or {}).get("queryStringParameters") or {}
+
+    if params.get("action") == "races":
+        return handle_race_list()
+    if params.get("url") == "preload":
+        return {
+            "statusCode": 200,
+            "body": json.dumps({"message": "preload successful"})
+        }
+
+    return handle_score_race(event)
+
+
+def handle_race_list():
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    try:
+        return {
+            "statusCode": 200,
+            "body": json.dumps(get_race_list(logger))
+        }
+    except Exception as e:
+        logger.error(f"UNHANDLED ERROR: {e}\nparams: action=races\n"
+                     f"Stack Trace:\n{traceback.format_exc()}")
+        return {
+            "statusCode": 502,
+            "body": json.dumps({"error": "Could not read the FIS race list"})
+        }
+
+
+def handle_score_race(event):
     return_data = {}
 
     try:
-        url = event["queryStringParameters"]["url"]
-        if url == 'preload':
-           return {
-               "statusCode": 200,
-               "body": json.dumps({"message": "preload successful"})
-           }
+        params = (event or {}).get("queryStringParameters") or {}
+        # the function url is public and gets hit by scanners with no query
+        # string at all. That is a bad request, not a server fault - letting it
+        # fall through to the generic handler would page us on every crawl.
+        missing = [p for p in ("url", "min-penalty", "event") if not params.get(p)]
+        if missing:
+            raise UserFacingException(f"missing required parameter(s): {', '.join(missing)}", 400)
 
-        # put this down here so page visits don't trigger logging from the lambda function preload - only form fills
+        url = event["queryStringParameters"]["url"]
+
+        # down here so page visits don't trigger logging from the preload - only form fills
         logger = logging.getLogger()
         logger.setLevel(logging.INFO)
         logger.info(f"params: {event['queryStringParameters']}")

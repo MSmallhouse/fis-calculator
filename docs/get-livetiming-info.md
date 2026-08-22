@@ -46,7 +46,13 @@ API Gateway proxy shape. Everything arrives in `event["queryStringParameters"]`:
 | `min-penalty` | `src/app.py:235-236` | **a comma pair**, `"<min_penalty>,<adder>"`, split on `,` |
 | `event` | `src/app.py:238` | `SLpoints` \| `GSpoints` \| `SGpoints` \| `DHpoints` |
 
-`url == "preload"` short-circuits at `src/app.py:224-228` with
+The handler is a **router** (`src/app.py:220`) with three modes: `action=races`
+returns the FIS live race list (`fis_race_list.py`), `url=preload` warms the container,
+and anything else scores a race. Requests missing `url`/`min-penalty`/`event` return
+**400**, deliberately — the Function URL is public and scanners hit it, and a 500 there
+would page us via the alerting.
+
+`url == "preload"` short-circuits with
 `{"message": "preload successful"}`. The site fires this on page load (`_includes/head.html:1`) to
 warm the lambda. It returns *before* the logger is configured, deliberately, so page views don't
 pollute the logs — only real form fills get logged (`src/app.py:230-233`).
@@ -514,5 +520,5 @@ When something breaks, in rough order of likelihood:
 - **F-factors and event maximums** (`src/app.py:10-23`, `:34-45`) are FIS rulebook constants.
   Nothing in the code records which season's rules they encode. See
   [points-calculation](points-calculation.md) — ask Matt, don't guess.
-- **Penalty/adder pairs** at `index.html:37-43` and the 33-entry `raceCategoryToPenalty` map at
+- **Penalty/adder pairs** at `index.html:37-43` and `CATEGORY_PENALTIES` in `src/fis_race_list.py` at
   `website/app.js:275-306` must stay in sync with each other and with FIS categories.
