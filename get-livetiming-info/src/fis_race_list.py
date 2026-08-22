@@ -18,7 +18,14 @@ import re
 import requests
 from bs4 import BeautifulSoup
 
-LIVE_PAGE_URL = "https://www.fis-ski.com/DB/alpine-skiing/live.html"
+# The sector filter is explicit rather than relying on the /DB/alpine-skiing/
+# path prefix. Both return the same rows today, but this is the endpoint FIS's
+# own UI drives, and an explicit filter survives the per-sector paths going away.
+# Without any filter this page also lists ski jumping and nordic combined.
+LIVE_PAGE_URL = (
+    "https://www.fis-ski.com/DB/general/live.html"
+    "?sectorcode=AL&categorycode=&gendercode=&disciplinecode=&nationcode="
+)
 REQUEST_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
                   "(KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
@@ -52,6 +59,23 @@ EVENT_CODES = {
 
 CODEX_PATTERN = re.compile(r"^\d{3,5}$")
 
+ALPINE_SECTOR_CODE = "AL"
+# Other FIS sectors. Grass skiing (GS) is the dangerous one: it runs Slalom,
+# Giant Slalom and Super G under the same names and the same FIS category codes
+# as alpine, so neither the event name nor the category can tell them apart -
+# only the sector can. None of these collide with a value in CATEGORY_PENALTIES.
+OTHER_SECTOR_CODES = {"CC", "JP", "NK", "FS", "SB", "GS", "TM", "MA", "PA", "PC"}
+
+
+def is_alpine_row(cells):
+    """The sector column only appears when the page is NOT already filtered by
+    sector, so absence of any sector code means the URL filter did the work.
+    If a sector code is present, it has to be the alpine one."""
+    sectors = [c for c in cells if c == ALPINE_SECTOR_CODE or c in OTHER_SECTOR_CODES]
+    if not sectors:
+        return True
+    return ALPINE_SECTOR_CODE in sectors
+
 
 def fetch_live_page():
     response = requests.get(LIVE_PAGE_URL, headers=REQUEST_HEADERS, timeout=20)
@@ -65,6 +89,7 @@ def text_of(element):
 
 def parse_race_row(row):
     cells = [c.get_text(strip=True) for c in row.select(".split-row__item")]
+    is_alpine = is_alpine_row(cells)
 
     # match on values we already know rather than on position - the columns move
     event = next((c for c in cells if c in EVENT_CODES), None)
@@ -75,6 +100,7 @@ def parse_race_row(row):
     live_element = row.select_one(".live__content")
 
     return {
+        "isAlpine": is_alpine,
         "codex": codex,
         "date": date_element.get("data-date") if date_element else None,
         "displayDate": text_of(date_element),
@@ -93,21 +119,29 @@ def get_race_list(logger):
     soup = BeautifulSoup(fetch_live_page(), "html.parser")
     rows = soup.select(".g-row")
 
-    races, skipped = [], []
+    races, other_sector, unreadable = [], [], []
     for row in rows:
         race = parse_race_row(row)
-        # a race we cannot categorise cannot be scored, and is usually the first
-        # sign FIS changed the page again
-        if race["codex"] and race["eventCode"] and race["minPenalty"] and race["date"]:
+        if not race["isAlpine"]:
+            other_sector.append(race)
+        elif race["codex"] and race["eventCode"] and race["minPenalty"] and race["date"]:
             races.append(race)
         else:
-            skipped.append(race)
+            # alpine, but something we could not read - the first sign FIS
+            # changed the page again
+            unreadable.append(race)
 
-    if skipped:
+    if other_sector:
+        # expected only if the sectorcode filter stops being honoured
+        logger.info(f"FIS race list: skipped {len(other_sector)} non-alpine row(s)")
+    if unreadable:
         logger.error(
-            f"ERROR: FIS_RACE_LIST_UNPARSED {len(skipped)} of {len(rows)} rows "
-            f"could not be read: {skipped[:5]}"
+            f"ERROR: FIS_RACE_LIST_UNPARSED {len(unreadable)} alpine row(s) "
+            f"could not be read: {unreadable[:5]}"
         )
     logger.info(f"FIS race list: {len(races)} race(s) parsed from {len(rows)} row(s)")
+
+    for race in races:
+        race.pop("isAlpine", None)
 
     return {"races": races}

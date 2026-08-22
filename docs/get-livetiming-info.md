@@ -164,6 +164,23 @@ as a generic 500:
 Both were reproduced against the old code and confirmed against the new using technique B in
 [Verifying a change without a test suite](#verifying-a-change-without-a-test-suite).
 
+## The alpine sector filter (do not remove)
+
+The race list comes from `general/live.html?sectorcode=AL&...`, with the sector
+filter stated explicitly rather than relying on the `/DB/alpine-skiing/` path.
+
+**Grass skiing (sector `GS`) runs Slalom, Giant Slalom and Super G under exactly the
+same event names, with the same FIS category codes.** Neither the event name nor the
+category can tell it apart from alpine — only the sector code can. On 2026-08-21 the
+unfiltered page carried 12 grass-skiing races at Tambre (BL) alongside 2 alpine races
+at El Colorado; an event-name whitelist happily accepted 6 of the grass-skiing ones.
+
+So `fis_race_list.py` checks the sector too. One wrinkle: **the sector column only
+appears when the page is not already filtered by sector.** The check therefore accepts
+rows with no sector code (the URL filter did the job) and rejects rows carrying a
+non-alpine one (the filter was ignored). Requiring `AL` unconditionally returns zero
+races against the filtered URL — that mistake was made and caught in testing.
+
 ## Runtime
 
 **python3.14** since Aug 2026 (commit `06f070c`), matching [get-points-list](get-points-list.md).
