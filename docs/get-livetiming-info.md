@@ -124,6 +124,27 @@ Two user-facing messages exist, both from the FIS scraper:
 
 ---
 
+## Fixed crashes worth knowing about
+
+Two `IndexError`s were fixed on 2026-08-21 (commit `040816e`), both of which reached users
+as a generic 500:
+
+- **`app.py:315`** read `output[0]` to set `hasThirdRun`. `output` comes from `finishers`, and
+  a competitor only lands there if `score != -1` — but `assign_scores` sets `-1` for anyone with
+  `time == 9999`, which is how DNF, DNS and DSQ are all encoded. So **a race where nobody has
+  finished yet produced an empty list and crashed**: the normal state of a live race in its first
+  minute, i.e. the mid-race use the site advertises. It now returns 200 with zero results, which
+  renders as an empty table.
+- **`app.py:133`** walked forward from index 10 gathering racers tied with 10th, unbounded. The
+  `!= 9999` guards make a DNF-heavy field safe; the reachable case is a scraper glitch parsing
+  every time identically.
+
+**Testing edge cases here without the network** is straightforward and worth doing before any
+scoring change: construct `scrapers.Competitor` objects directly, set `.time` and `.fis_points`,
+assign to `race.competitors`, and monkeypatch `utils.scrape_results` and
+`utils.connect_to_database`. That is how both of these were reproduced against the old code and
+confirmed against the new.
+
 ## Runtime
 
 **python3.14** since Aug 2026 (commit `06f070c`), matching [get-points-list](get-points-list.md).
