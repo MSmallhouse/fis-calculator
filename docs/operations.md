@@ -281,7 +281,7 @@ Account concurrency limit is **400**. DynamoDB tables are both `PAY_PER_REQUEST`
 - **Neither function has reserved concurrency.** Either can be driven to 400 concurrent executions — get-points-list at 3008 MB / 900s, plus a full DynamoDB scan and thousands of writes per run. Setting `ReservedConcurrentExecutions: 2` on the nightly job is the cheapest guard, plus a billing alarm.
 - ~~get-points-list's unauthenticated API Gateway trigger~~ — **removed 2026-08-21** (commit `77f97bf`). It had taken zero requests in 30 days while offering a free path to run the expensive function. The function now has no resource policy at all; the scheduler invokes through its own IAM role.
 - **An orphaned RDS Proxy is still running.** `fis-points-database-proxy`, status `available`, engine MySQL — with **zero RDS instances** behind it. Left over from the pre-DynamoDB era ([architecture.md](architecture.md)). RDS Proxy bills per vCPU-hour whether or not anything uses it. Delete it, and its 317 MB log group.
-- **Four stale API Gateways**: `hello-world`, `sam-app`, `sam-app-2`, `selenium-get-livetiming-info`. Cleanup candidates. Do **not** hand-delete `get-livetiming-info` (i22c6hlx33) — its stack owns it.
+- ~~Four stale API Gateways~~ — removed 2026-08-21 with the six abandoned stacks that owned them. `i22c6hlx33` (`get-livetiming-info`) is the only REST API left and its stack owns it.
 - **No log retention** anywhere. Setting 30–90 days would cap indefinite storage growth.
 
 ---
