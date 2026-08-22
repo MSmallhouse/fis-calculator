@@ -295,6 +295,20 @@ limit and you get an email. Adding a budget action is deliberately rejected, sin
 is what would take the live site down at a threshold. Spend is controlled by reserved
 concurrency instead.
 
+### Deleting a SAM image-based stack
+
+CloudFormation cannot delete a non-empty ECR repository, so the companion stack ends
+in `DELETE_FAILED`. Clear the images first, then re-issue the delete:
+
+```bash
+R=<repo-name>
+IDS=$(aws ecr list-images --repository-name "$R" --query 'imageIds[*]' --output json)
+aws ecr batch-delete-image --repository-name "$R" --image-ids "$IDS"
+aws cloudformation delete-stack --stack-name <companion-stack>
+```
+
+Two of these had been silently stuck since 2023 for this exact reason.
+
 ## When something looks broken
 
 Work down this list; each step rules out a whole class of cause.
