@@ -249,7 +249,12 @@ def handle_race_list():
             "body": json.dumps(get_race_list(logger))
         }
     except Exception as e:
-        logger.error(f"UNHANDLED ERROR: {e}\nparams: action=races\n"
+        # deliberately NOT the "UNHANDLED ERROR" marker. This runs on every page
+        # load, so during a FIS outage in season it would fire thousands of
+        # times a day; the subscription filter behind it emails per event. This
+        # marker feeds a CloudWatch alarm instead, which collapses a sustained
+        # failure into one notification. See alerts/template.yaml.
+        logger.error(f"FIS_RACE_LIST_UNAVAILABLE: {e}\n"
                      f"Stack Trace:\n{traceback.format_exc()}")
         return {
             "statusCode": 502,

@@ -100,6 +100,45 @@ Resources:
               Mode: FLEXIBLE
               MaximumWindowInMinutes: 15
 
+  # --- sustained: the FIS race list ---------------------------------------
+
+  # The race list is fetched on every page load, so a FIS outage or restyle
+  # produces one failure per visit - thousands a day in season. Emailing per
+  # event would be unusable, so these two markers feed a metric and an alarm
+  # instead: a sustained failure collapses into a single notification, and one
+  # more when it recovers.
+  RaceListFailureMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref CalculatorLogGroup
+      FilterPattern: '?"FIS_RACE_LIST_UNAVAILABLE" ?"FIS_RACE_LIST_UNPARSED"'
+      MetricTransformations:
+        - MetricName: fis-race-list-failure
+          MetricNamespace: fis-calculator
+          MetricValue: '1'
+          DefaultValue: 0
+
+  RaceListFailureAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: fis-race-list-failing
+      AlarmDescription: >
+        The FIS live race list could not be fetched or parsed. The date picker
+        on the site is showing an error. Usually means FIS changed the page or
+        is down; check docs/get-livetiming-info.md.
+      Namespace: fis-calculator
+      MetricName: fis-race-list-failure
+      Statistic: Sum
+      Period: 900
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopicArn
+      OKActions:
+        - !Ref AlertTopicArn
+
 Outputs:
   ErrorNotifierFunction:
     Description: Emails unhandled calculator errors as they happen.

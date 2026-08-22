@@ -200,9 +200,12 @@ train you to ignore it.
 The live subscription filter is `?"UNHANDLED ERROR" ?"Failed to connect to DynamoDB"`.
 Three call sites emit `UNHANDLED ERROR`, so all three page: the generic 500 handler
 (`app.py:382`), and — added 2026-08-22 — `handle_race_list()` (`app.py:252`), which fires
-when the FIS live page cannot be fetched or parsed. That third one is a **new alert
-source**: a FIS restyle or outage now emails rather than failing silently in the browser.
-Bare requests to the public Function URL deliberately return **400** via
+when the FIS live page cannot be fetched or parsed. Race-list failures deliberately do **not** use the `UNHANDLED ERROR` marker. That
+endpoint is hit on **every page load**, so a FIS outage in season (1,000-4,000 requests
+a day) would email per event. They log `FIS_RACE_LIST_UNAVAILABLE` /
+`FIS_RACE_LIST_UNPARSED` instead, which feed a metric filter and the
+`fis-race-list-failing` alarm — 5 failures in 15 minutes, so a sustained outage is one
+email and one more on recovery, rather than thousands.
 `UserFacingException`, not 500, precisely so scanner traffic does not page anyone.
 
 Volume is why the digest exists rather than per-event mail: the calculator runs
