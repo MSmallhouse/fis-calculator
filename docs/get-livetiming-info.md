@@ -164,6 +164,15 @@ as a generic 500:
 Both were reproduced against the old code and confirmed against the new using technique B in
 [Verifying a change without a test suite](#verifying-a-change-without-a-test-suite).
 
+## Codex padding
+
+FIS codexes are four digits **with leading zeros**, and the live timing server is
+literal about it — `/al0279/main.xml` is the race, `/al279/main.xml` is a 404. Users
+type the codex off a start list without the leading zero, so `fis_livetiming_scraper`
+zero-pads any all-digit codex to four (`src/scrapers.py:428`). Values already four
+digits or longer are untouched. Before this, `279` failed with "Race is not live or
+not found" while `0279` worked, which reads as the race simply not existing.
+
 ## The alpine sector filter (do not remove)
 
 The race list comes from `general/live.html?sectorcode=AL&...`, with the sector

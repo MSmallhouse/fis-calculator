@@ -423,6 +423,14 @@ def fis_livetiming_scraper(race):
         CODEX = match.group(1)
     else:
         CODEX = race.url.strip()
+
+    # FIS codexes are four digits with leading zeros, and the live timing server
+    # is literal about it: /al0279/main.xml is the race, /al279/main.xml is a
+    # 404. People type the codex without the leading zero, so pad it. Anything
+    # already four digits or longer is left alone.
+    if CODEX.isdigit():
+        CODEX = CODEX.zfill(4)
+
     TIMESTAMP = int(time.time() * 1000)
 
     def strip_tags(raw_data):
