@@ -7,7 +7,7 @@ AWS reference and runbook. See [README.md](README.md) for the doc index, [archit
 ## Traps — read before touching anything
 
 1. **The `AWS/Lambda` `Errors` metric is always `0` for get-points-list.** Both download modules wrap everything in a bare `except Exception` that only logs, so the handler returns normally and Lambda records a success. A totally broken feed looks identical to a healthy run. Never use `Errors`, `Throttles`, or the scheduler DLQ to judge health.
-2. **The nightly trigger is an EventBridge _Scheduler_ schedule, not an EventBridge _rule_.** `aws events list-rules` shows a decoy named `get-points-list-daily-run` with **zero targets** — dead leftover. `aws events list-rule-names-by-target` returns empty for the function and is misleading.
+2. **The nightly trigger is an EventBridge _Scheduler_ schedule, not an EventBridge _rule_.** Look under `aws scheduler`, not `aws events` — the latter returns nothing of ours, and `aws events list-rule-names-by-target` returns empty for the function, which reads as "no trigger exists". (A zero-target decoy rule named `get-points-list-daily-run` used to sit there and cost real debugging time; deleted 2026-08-21.)
 3. **A schedule with an expired `EndDate` stays `State: ENABLED` while silently never firing.** This caused a 77-day outage (Jun 5 – Aug 21 2026) with no alert of any kind.
 4. **`UpdateSchedule` is a full PUT.** Unspecified optional fields are reset to system defaults — you will silently lose the DLQ, retry policy, timezone, and description. Always `get-schedule` first and re-supply everything. It also **refuses a backdated `StartDate`** (`cannot be earlier than 5 minutes ago`), so you cannot round-trip an old one; omit it instead.
 5. **The templates do not describe what is deployed.** See [IaC drift](#iac-drift). `sam deploy` is not a safe no-op.
@@ -34,16 +34,35 @@ FN=get-points-list-GetPointsListFunction-D0YVo1592Mhc
 LT=get-livetiming-info-getLivetimingInfoFunction-kBjRyLq6345M
 ```
 
-### Dead log groups
+### Full inventory (post-cleanup, 2026-08-21)
 
-Prior deployments left log groups behind. Querying the wrong one returns nothing and looks like "no activity":
+A large cleanup on 2026-08-21 removed everything that was not load-bearing. If you find
+something in the account that is **not** on this list, it is either new or was missed:
 
-- `/aws/lambda/get-points-list-GetPointsListFunction-UW68ftXGr1E5` — dead
-- `/aws/lambda/get-livetiming-info-getLivetimingInfoFunction-c7dxVMrCKFlA` — dead (**but still has a live alarm pointed at it**, see below)
-- `/aws/rds/proxy/fis-points-database-proxy` — dead, from the pre-DynamoDB MySQL era, 317 MB
-- `/aws/lambda/url-params` — unidentified, 1 KB
+| | |
+|---|---|
+| Stacks | `get-points-list`, `get-livetiming-info`, `fis-calculator-alerts`, `aws-sam-cli-managed-default` (owns the deploy bucket — **never delete**) |
+| Lambdas | the two above, plus `fis-calculator-alerts-ErrorNotifierFunction-*` and `-NameMatchDigestFunction-*` |
+| REST APIs | `i22c6hlx33` (`get-livetiming-info`) only — stack-owned, don't hand-delete |
+| Alarms | `Get Points List error in logs alarm`, `get-points-list-did-not-run` |
+| Metric filters | `get-points-list-error-log-message` only |
+| Schedules | `get-fis-points-nightly-run`, `fis-calculator-name-match-digest` |
+| EventBridge *rules* | **none at all** — `aws events list-rules` returns `[]`. The ApplicationInsights managed rules went with the `hello-world` stack. |
+| Lambda layers | none |
+| ECR repos | none |
+| RDS proxies | none |
+| DynamoDB | `points_list_dynamo_db`, `ussa_points_list` — both `PAY_PER_REQUEST` |
+| SNS | `Fis_Points_Errors_Topic`, `Fis_Points_Errors_Topic_bc_email` |
 
-**No log group has a retention policy.** They grow forever; the live livetiming group is already ~182 MB.
+Deleted in that pass: 8 abandoned stacks, 4 stale public REST APIs, 2 orphaned python3.9
+layers, 3 ECR repos, an orphaned RDS proxy, the zero-target EventBridge rule, 2 dead
+alarms, 2 stale metric filters, and 4 retired log groups (~450 MB).
+
+### Log groups
+
+Four, one per live function, **all with 90-day retention** (set 2026-08-21; they previously
+grew forever). Retired groups from prior deployments have been deleted — historically these
+were a trap, since querying the wrong one returns nothing and reads as "no activity".
 
 ---
 
@@ -123,16 +142,20 @@ A healthy run logs, in order: `Checking fis points` → `download_url: ...` → 
 
 All route to SNS. `Fis_Points_Errors_Topic` → Matt's gmail; `Fis_Points_Errors_Topic_bc_email` → a bc.edu address.
 
-| Alarm | Watches | Status |
+Two alarms, both live and both functional. Anything else you remember is gone.
+
+| Alarm | Watches | Notes |
 |---|---|---|
-| `Get Points List error in logs alarm` | metric filter `get-points-list-error-log-message`, pattern `ERROR`, on the live get-points-list log group → custom metric ≥ 1 over 300s | **Working.** Confirmed firing Aug 21 2026. |
-| `get-points-list-did-not-run` | `Invocations < 1` over 86400s, `TreatMissingData: breaching` | **Working.** Added Aug 2026 — silence alarms instead of hiding. This is the gap that let the 77-day outage pass unnoticed. |
-| `get_points_list_error_alarm` | `AWS/Lambda` `Errors` ≥ 1 | **Dead weight.** Can never fire while exceptions are swallowed. Delete candidate. |
-| `get-livetiming-info-error` | metric filter `get-livetiming-info-table-doesn't-exist` on the **retired** `...c7dxVMrCKFlA` log group | **Dead**, and now superseded by the alerts stack below. The live function logs to `...kBjRyLq6345M`, so this alarm watches a log group nothing writes to. Deletion candidate. |
+| `Get Points List error in logs alarm` | metric filter `get-points-list-error-log-message`, pattern `ERROR`, on the live get-points-list log group → custom metric ≥ 1 over 300s | Confirmed firing Aug 21 2026. `INSUFFICIENT_DATA` is its normal resting state — the metric only emits on a match. |
+| `get-points-list-did-not-run` | `Invocations < 1` over 86400s, `TreatMissingData: breaching` | Added Aug 2026 so *silence* alarms instead of hiding. This is the gap that let the 77-day outage pass unnoticed. |
 
-A stale metric filter `get-points-list-error` also lingers on the retired `...UW68ftXGr1E5` group.
+Two dead alarms were deleted on 2026-08-21 and should not be recreated:
+`get_points_list_error_alarm` (on `AWS/Lambda` `Errors`, which can never fire while
+exceptions are swallowed — see trap 1) and `get-livetiming-info-error` (whose metric filter
+pointed at a **retired** log group, so it watched something nothing wrote to; superseded by
+the alerts stack below).
 
-**Neither working alarm can catch a _quiet wrong answer_** — a successful run that loads the wrong data. Two such bugs shipped undetected for months (a not-yet-valid points list, and a headerless CSV eating one athlete per file). That failure class is what [testing.md](testing.md) exists for.
+**Neither remaining alarm can catch a _quiet wrong answer_** — a successful run that loads the wrong data. Two such bugs shipped undetected for months: a not-yet-valid points list, and a headerless CSV eating one athlete per file. Both produced clean, green runs. That failure class is what [testing.md](testing.md) exists for; no amount of alarming will find it.
 
 ---
 
@@ -217,14 +240,16 @@ aws lambda get-function-configuration --function-name $FN \
   --query '{Runtime:Runtime,State:State,LastUpdate:LastUpdateStatus,Sha:CodeSha256}'
 ```
 
-Verify with an async invoke — it is the same path the scheduler uses, and `update_dynamodb` diffs before writing, so a redundant run is harmless:
+Verify with an async invoke — `update_dynamodb` diffs before writing, so a redundant run is harmless:
 
 ```bash
 aws lambda invoke --function-name $FN --invocation-type Event \
   --payload '{"source":"post-deploy-verify"}' --cli-binary-format raw-in-base64-out /tmp/out.json
 ```
 
-Then read the logs as above. A full FIS refresh of ~8,400 rows takes ~120s against a 900s timeout.
+Then read the logs as above. A full FIS refresh of ~8,400 rows takes ~120s against a 900s timeout; `UPDATES: 0 rows` on both halves is the expected result if a run already happened recently.
+
+Two caveats on that invoke. It is **not** quite the scheduler's path — the scheduler uses its own IAM role, so if you have changed anything about permissions, confirm that separately with `aws iam simulate-principal-policy --policy-source-arn <scheduler role> --action-names lambda:InvokeFunction --resource-arns <fn arn>`, or by creating a throwaway one-off `at()` schedule with `ActionAfterCompletion: DELETE`. And with `ReservedConcurrentExecutions: 1`, a manual invoke launched while the nightly run is in flight will be **throttled**, not queued — that is intended.
 
 **Prefer this over `sam deploy`.** A CloudFormation update is a live-fire test of the drift below; `update-function-code` touches only the code and leaves the hand-configured role, schedule, and tables alone. Rollback is re-uploading the prior artifact and flipping the runtime back.
 
@@ -261,28 +286,35 @@ afterwards. This *reduces* drift instead of adding to it.
 
 ## IaC drift
 
-The `template.yaml` files are partial documentation, not truth. The stacks were grown by hand in the console. Missing from IaC entirely:
+The two original `template.yaml` files are partial documentation, not truth — those stacks were grown by hand in the console. (`fis-calculator-alerts` is the exception: it is fully described by its template. Keep it that way.)
 
-- **The nightly schedule.** get-points-list's template declares no event source at all; the EventBridge Scheduler schedule lives outside IaC.
-- **The Function URL** that the website actually calls (get-livetiming-info's template declares only API Gateway).
-- **Both DynamoDB tables**, and **the IAM permissions to reach them** — the implicit SAM role has no DynamoDB policy as written, so it was edited out of band.
-- **The pandas layer** attached to get-livetiming-info (`pandas-layer/` exists in the repo with no `Layers:` entry).
-- **CORS**, configured on the Function URL, absent from the template.
+Still missing from IaC:
 
-A clean `sam deploy` into a fresh account would produce a non-working system. Also stale in-repo: `template-copy.yaml` and `template.backup.yaml` (python3.9 / Docker-image era), and `get-points-list/src/Dockerfile` (still `python:3.10`, referenced only by the gitignored backup template).
+- **The nightly schedule.** get-points-list's template declares no event source at all; the EventBridge Scheduler schedule lives entirely outside IaC.
+- **The Function URL** that the website actually calls. get-livetiming-info's template declares an API Gateway event instead (`i22c6hlx33`), which is vestigial — nothing routes through it.
+- **Both DynamoDB tables**, and **the IAM permissions to reach them.** get-points-list's template has no `Policies` block at all; the role carries two hand-added inline policies, `dynamo_db_permissions` and `ussa_points_list_policy`. Verified still present after the 2026-08-21 change-set update — a CFN update that does not touch the role leaves them alone.
+- **CORS**, configured on the Function URL (`AllowOrigins: *`), absent from the template.
+
+A clean `sam deploy` into a fresh account would produce a non-working system.
+
+**Fixed since:** `get-points-list/template.yaml` now matches reality on runtime (`python3.14`), `ReservedConcurrentExecutions: 1`, and the absence of an event source. There is **no pandas layer** — neither function has ever had one (`Layers: null` on both); dependencies are bundled in the zips. The repo's `get-livetiming-info/pandas-layer/` directory is 123 MB of dead weight referenced by nothing.
+
+Also stale in-repo: `template-copy.yaml` and `template.backup.yaml` (python3.9 / Docker-image era), and `get-points-list/src/Dockerfile` (still `python:3.10`, referenced only by the gitignored backup template).
 
 ---
 
 ## Cost and abuse exposure
 
-Account concurrency limit is **400**. DynamoDB tables are both `PAY_PER_REQUEST`.
+Account concurrency limit is **400** (399 unreserved, after the cap below). DynamoDB tables are both `PAY_PER_REQUEST`.
 
-- **`get-livetiming-info` Function URL** — `https://hsa35mz4zsbu6nqwlb5jvkk4o40jruqd.lambda-url.us-east-2.on.aws/`, `AuthType: NONE`, `CORS: *`. Hardcoded in `website/app.js` and served on the live site, so it is public by design. Nothing to hide; it is also the single largest abuse surface.
-- **Neither function has reserved concurrency.** Either can be driven to 400 concurrent executions — get-points-list at 3008 MB / 900s, plus a full DynamoDB scan and thousands of writes per run. Setting `ReservedConcurrentExecutions: 2` on the nightly job is the cheapest guard, plus a billing alarm.
-- ~~get-points-list's unauthenticated API Gateway trigger~~ — **removed 2026-08-21** (commit `77f97bf`). It had taken zero requests in 30 days while offering a free path to run the expensive function. The function now has no resource policy at all; the scheduler invokes through its own IAM role.
-- **An orphaned RDS Proxy is still running.** `fis-points-database-proxy`, status `available`, engine MySQL — with **zero RDS instances** behind it. Left over from the pre-DynamoDB era ([architecture.md](architecture.md)). RDS Proxy bills per vCPU-hour whether or not anything uses it. Delete it, and its 317 MB log group.
-- ~~Four stale API Gateways~~ — removed 2026-08-21 with the six abandoned stacks that owned them. `i22c6hlx33` (`get-livetiming-info`) is the only REST API left and its stack owns it.
-- **No log retention** anywhere. Setting 30–90 days would cap indefinite storage growth.
+**Almost none of the AWS bill is this project.** Checked via Cost Explorer 2026-08-21 — the whole account runs ~$12/month, of which ~$7.74 is a `t3.micro` (`i-0923ce83c9a4b7047`, "arb-scanner") running in **us-east-1**, unrelated to fis-calculator, plus ~$3.72 for its public IPv4. Lambda, DynamoDB and CloudWatch for this project round to zero. Don't go hunting for savings here; the lever that matters is bounding *worst case*, not trimming baseline.
+
+- **`get-livetiming-info` Function URL** — `https://hsa35mz4zsbu6nqwlb5jvkk4o40jruqd.lambda-url.us-east-2.on.aws/`, `AuthType: NONE`, `CORS: *`. Hardcoded in `website/app.js` and served on the live site, so it is public by design. Nothing to hide; it is also the entire remaining abuse surface.
+- **`get-livetiming-info` is deliberately left uncapped.** Matt's call, and the right one: it is user-facing, and throttling a real race is worse than the cost exposure. Peak observed concurrency is **20** (Feb 2026) against the 400 limit; duration p50 2.5 ms (the preload warm-up pings), p99 12 s. **Do not propose capping it again without a new reason.**
+- **`get-points-list` is capped at `ReservedConcurrentExecutions: 1`.** Its only trigger is the nightly schedule, so anything concurrent is a bug or abuse; a second invocation is visibly throttled rather than quietly running the ingest twice over the same tables. This is a duplicate-run guard, not a cost guard — that function has no public trigger at all any more.
+- ~~get-points-list's unauthenticated API Gateway trigger~~ — **removed 2026-08-21** (commit `77f97bf`). Zero requests in 30 days while offering a free path to run the expensive function. It now has **no resource policy at all**; the scheduler invokes through its own IAM role (verified by `simulate-principal-policy` and by a real one-off scheduled invocation).
+- ~~Four stale API Gateways~~, ~~an orphaned RDS proxy~~, ~~two python3.9 layers~~, ~~three ECR repos~~ — all removed 2026-08-21. The RDS proxy was **not** billing, despite appearances: Cost Explorer showed $0 RDS spend for the period. It was tidiness, not money.
+- **Log retention is now 90 days** on all four live groups.
 
 ---
 
@@ -291,9 +323,17 @@ Account concurrency limit is **400**. DynamoDB tables are both `PAY_PER_REQUEST`
 There is a $15/month AWS Budget with alerts at 85% actual, 100% actual and 100%
 forecasted, but **no budget actions** — and AWS has no account-level spend cap for
 standard accounts. It is a smoke detector, not a sprinkler: spend continues past the
-limit and you get an email. Adding a budget action is deliberately rejected, since that
-is what would take the live site down at a threshold. Spend is controlled by reserved
-concurrency instead.
+limit indefinitely and you get an email.
+
+**Adding a budget action is deliberately rejected.** A budget action is the one mechanism
+that *would* stop the lambdas at a threshold, i.e. take the live site down over a billing
+number. Don't propose it.
+
+Which means the only real control on runaway spend is the concurrency cap — and that is
+only on `get-points-list`, which has no public trigger anyway. The calculator is
+knowingly unbounded. Note also that baseline forecast (~$12) already sits close to the
+$15 limit, mostly from the unrelated EC2 instance, so the 85% alert is prone to firing on
+noise rather than on anything meaningful.
 
 ### Deleting a SAM image-based stack
 

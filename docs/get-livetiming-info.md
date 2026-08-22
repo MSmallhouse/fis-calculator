@@ -14,12 +14,14 @@ Five things that cost the most time to rediscover:
 
 1. **There are no tests here.** `tests/unit/test_handler.py` is unmodified SAM hello-world
    boilerplate that imports a nonexistent module; `pytest` errors at collection. The real workflow
-   is the commented-out debug block at `src/app.py:244-249`. See [testing](testing.md).
+   is the commented-out debug block at `src/app.py:244-249`, plus the two offline techniques in
+   [Verifying a change without a test suite](#verifying-a-change-without-a-test-suite). See
+   [testing](testing.md).
 2. **`get-livetiming-info/_site/` contains a stale copy of `src/`.** Jekyll build output that got
    committed once. Grep hits in there are lies. Same for `template-copy.yaml` (python3.9).
 3. **`pandas-layer/` is dead.** 123MB on disk, referenced by nothing, and the deployed function
-   reports `Layers: null`. Dependencies are bundled in the 30.8MB function zip. See
-   [Runtime](#runtime).
+   reports `Layers: null` — and always has. Dependencies are bundled in the ~47MB function zip.
+   It never blocked the python3.14 move. See [Runtime](#runtime).
 4. **The site calls a Lambda Function URL, not the API Gateway in `template.yaml`.**
    `https://hsa35mz4zsbu6nqwlb5jvkk4o40jruqd.lambda-url.us-east-2.on.aws/`, hardcoded at
    `website/app.js:93`. The template's API Gateway event is vestigial.
@@ -72,7 +74,7 @@ three source lines, so literal newlines and indentation are embedded before `&mi
 
 ### Response
 
-`src/app.py:295-309`, status 200:
+`src/app.py:309-318`, status 200:
 
 ```jsonc
 {
@@ -91,7 +93,7 @@ three source lines, so literal newlines and indentation are embedded before `&mi
     }
   ],
   "event": "SLpoints",
-  "hasRunTimes": true,           // ALWAYS true - hardcoded at src/app.py:298
+  "hasRunTimes": true,           // ALWAYS true - hardcoded at src/app.py:312
   "areScoresProjections": false,
   "notFound": "SMITH, John ",    // space-joined names whose points weren't found
   "hasThirdRun": false,
@@ -104,19 +106,32 @@ Times are formatted by `float_to_time_string` (`src/app.py:209-217`) as `m:ss.xx
 
 Two things to know about `results`:
 
-- **`place` is assigned twice in the same dict literal** (`src/app.py:269-270`). The second wins;
+- **`place` is assigned twice in the same dict literal** (`src/app.py:271-272`). The second wins;
   the first is dead. The live expression blanks the place on a tie with the previous finisher.
-- Racers with `score == -1` (DNF/DNS/DSQ) are filtered out at `src/app.py:264` unless this is a
+- Racers with `score == -1` (DNF/DNS/DSQ) are filtered out at `src/app.py:266` unless this is a
   startlist-only response.
-- `hasThirdRun` reads `output[0].keys()` (`src/app.py:301`) — **it will `IndexError` if `output`
-  is empty**, which then surfaces as a generic 500.
+- **`results` can legitimately be empty** — a race where nobody has finished yet returns 200 with
+  `"results": []` and `hasThirdRun: false` (`src/app.py:315`). The frontend renders an empty table.
+  This used to be an `IndexError` -> 500; see [Fixed crashes](#fixed-crashes-worth-knowing-about).
 
 ### Errors
 
 `UserFacingException` (`src/exceptions.py`) carries its own `status_code` (default 400) and is
-returned as `{"error": "<message>"}` at that status (`src/app.py:311-318`). Anything else becomes a
-500 with the raw exception string (`src/app.py:320-328`). The frontend shows `errJson.error`
+returned as `{"error": "<message>"}` at that status (`src/app.py:325-333`). Anything else becomes a
+500 with the raw exception string (`src/app.py:335-343`). The frontend shows `errJson.error`
 verbatim except on 500, where it substitutes "Something went wrong...".
+
+**The two handlers log deliberately different prefixes, and alerting depends on it:**
+
+| log line | emitted at | alerted? |
+|---|---|---|
+| `USER RAISED ERROR: ...` | `src/app.py:329` | **no** — a bad URL is not an incident |
+| `UNHANDLED ERROR: ...` | `src/app.py:339` | **yes**, immediate email |
+| `NAME_MATCH_MISS {json}` | `src/app.py:297-307` | yes, but batched into a daily digest |
+
+Both error lines now include `params: {...}` so an alert can say which request broke. If you rename
+those prefixes or change the `NAME_MATCH_MISS` JSON shape, update `alerts/src/error_notifier.py` and
+`alerts/src/digest.py` with them — see [operations](operations.md).
 
 Two user-facing messages exist, both from the FIS scraper:
 `"Race is not live or not found"` (404, `src/scrapers.py:457`) and
@@ -139,11 +154,8 @@ as a generic 500:
   `!= 9999` guards make a DNF-heavy field safe; the reachable case is a scraper glitch parsing
   every time identically.
 
-**Testing edge cases here without the network** is straightforward and worth doing before any
-scoring change: construct `scrapers.Competitor` objects directly, set `.time` and `.fis_points`,
-assign to `race.competitors`, and monkeypatch `utils.scrape_results` and
-`utils.connect_to_database`. That is how both of these were reproduced against the old code and
-confirmed against the new.
+Both were reproduced against the old code and confirmed against the new using technique B in
+[Verifying a change without a test suite](#verifying-a-change-without-a-test-suite).
 
 ## Runtime
 
@@ -158,19 +170,44 @@ this upgrade, because its path is hardcoded to `python/lib/python3.10/site-packa
 wrong. **The deployed function has `Layers: null`** and always has; dependencies are bundled in
 the function zip. `pandas-layer/` is 123MB of dead weight referenced by nothing.
 
-**Verifying a change here without a test suite.** This lambda has none, so the 3.14 move was
-validated by differential run, which is the pattern to reuse:
+## Verifying a change without a test suite
 
-1. Capture the live Function URL's response for a known race as a baseline.
-2. Run the same source under both runtimes in `public.ecr.aws/lambda/python:<ver>` containers
-   (mount `~/.aws` read-only for the DynamoDB lookups) and diff the JSON.
-3. Cover what one race cannot with a synthetic harness — DNFs in the field, the >=3-unscored
-   penalty override, fewer-than-five-finishers padding, both name-lookup paths with `Decimal`
-   values, time parsing, phpserialize.
+This lambda has no tests, so changes are verified with two complementary techniques. Both were used
+for the python3.14 move and the two crash fixes; reuse them for anything touching scraping or
+scoring.
+
+### A. Differential run against a real race
+
+Proves end-to-end behaviour is unchanged, including the scrapers and DynamoDB.
+
+1. Capture the live Function URL's response for a known race as a baseline, **before** changing
+   anything. Fetch it twice to confirm the race isn't still updating.
+2. Run the modified source in a `public.ecr.aws/lambda/python:3.14` container
+   (`--platform linux/amd64`, mount `~/.aws` read-only for the DynamoDB lookups) and diff the JSON
+   against the baseline.
+3. Deploy, then fetch the live URL again and diff once more.
 
 Codex **5279** (Noram/Europa Cup SL, 16 finishers, no unmatched racers) is a known-good case worth
-reusing while it stays live. All three comparisons were byte-identical and 18/18 harness outputs
-matched.
+reusing while it stays live. Note this only exercises the paths that race happens to hit — a clean
+race touches no DNF, tie, projection or name-matching code at all.
+
+### B. Synthetic edge cases, offline
+
+Covers what a single real race cannot, and needs no network:
+
+```python
+import app, scrapers, utils
+c = scrapers.Competitor("RACER One"); c.time = 61.11; c.fis_points = 42.0
+race = app.Race("1234", "23", "8", "SLpoints", True)
+race.competitors = [c, ...]; race.winning_time = 61.11
+utils.scrape_results = lambda r: None          # bypass the network
+utils.connect_to_database = lambda r: None
+```
+
+Worth covering: DNFs in the field, the >=3-unscored penalty override, fewer-than-five-finishers
+padding, an all-identical-times field, an empty field, both name-lookup paths with `Decimal` values
+from DynamoDB, time parsing and formatting, and a `phpserialize` round trip. An 18-check harness of
+exactly this shape caught nothing on the 3.14 move (correctly) and confirmed both crash fixes.
 
 
 ## Provider dispatch
@@ -398,7 +435,7 @@ def preprocess_name(full_name):
 
 So `SMITH, John` and `john Sm-itH` match — and so does any anagram. Collisions are possible by
 construction. The human-readable name is stashed in `competitor.temp_full_name` and restored for
-output at `src/app.py:255-257`.
+output at `src/app.py:257-258`.
 
 Note the asymmetry documented in [get-points-list](get-points-list.md): FIS rows store
 `Competitorname` raw from the CSV, while USSA rows store it *already scrambled*. That is why
@@ -445,7 +482,7 @@ Selected at `src/utils.py:266-276`:
 | CORS | **absent entirely** | configured on the Function URL |
 
 Timeout 120s, MemorySize 2048, python3.14, x86_64 (`template.yaml:7-12`). Deployed CodeSize
-46,984,937. Stack `get-livetiming-info`, region `us-east-2`, account `828841719603`.
+46,986,094, no reserved concurrency (deliberate — see [operations](operations.md)). Stack `get-livetiming-info`, region `us-east-2`, account `828841719603`.
 `samconfig.toml` carries a stale global `stack_name = "selenium-get-fis-points-list"` that the
 deploy section overrides.
 
@@ -471,7 +508,7 @@ When something breaks, in rough order of likelihood:
 ## Seasonal maintenance
 
 - **`score2027`** is hardcoded to one season in two places that must change together: the response
-  key at `src/app.py:274`, and the column header `<th>2027 Score</th>` at `website/app.js:84`
+  key at `src/app.py:276`, and the column header `<th>2027 Score</th>` at `website/app.js:84`
   (with reads at `website/app.js:244-248`). Deriving it from `race.adder` and the current date
   would remove the chore.
 - **F-factors and event maximums** (`src/app.py:10-23`, `:34-45`) are FIS rulebook constants.

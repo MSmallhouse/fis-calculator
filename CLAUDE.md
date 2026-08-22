@@ -18,9 +18,14 @@ guessing. Start at [docs/architecture.md](docs/architecture.md).
 1. **A green run means nothing.** Both ingest paths swallow exceptions and return
    normally, so the Lambda `Errors` metric is always 0. Judge health by *did it run*
    plus *do the logs contain `ERROR`*. See [docs/operations.md](docs/operations.md).
-2. **The SAM templates do not describe what is deployed.** The schedule, DynamoDB
-   tables, IAM permissions, Function URL, and pandas layer all live outside IaC.
-   `sam deploy` is not a safe no-op — prefer `update-function-code`.
+2. **The SAM templates do not fully describe what is deployed.** The nightly schedule,
+   the DynamoDB tables, the IAM policies reaching them, and the Function URL all live
+   outside IaC. (`alerts/` is the exception — it is fully described by its template.)
+   Also, **`sam deploy` cannot build these**: SAM CLI 1.142.1 rejects python3.14, and a
+   local build on arm64 produces macOS wheels. Build in `public.ecr.aws/lambda/python:3.14`
+   under `--platform linux/amd64` and ship via `update-function-code`, or drive a
+   CloudFormation change set for template changes. Both recipes are in
+   [docs/operations.md](docs/operations.md).
 3. **Don't deploy or push without being asked.** Batch changes, deploy once. Pushing
    `main` also republishes the live site.
 4. **This is a public repo and a live site with real users.** Prefer surgical changes.
@@ -30,9 +35,11 @@ guessing. Start at [docs/architecture.md](docs/architecture.md).
 ## Working here
 
 - Tests: `cd get-points-list && python -m pytest tests/ -q` (22, no network).
-  `get-livetiming-info` has none — see [docs/testing.md](docs/testing.md).
+  `get-livetiming-info` has none; verify changes there by differential run against a
+  known race instead — see [docs/testing.md](docs/testing.md).
 - Never read `_site/`, `get-livetiming-info/_site/` (a stale copy of `src/` that will
-  mislead you), `.aws-sam/`, `pandas-layer/`, `template-copy.yaml`, `template.backup.yaml`.
+  mislead you), `.aws-sam/`, `pandas-layer/` (123MB, attached to nothing, never was),
+  `template-copy.yaml`, `template.backup.yaml`. All are local-only or dead.
 - Scraped upstreams break in specific, catalogued ways. Check the relevant doc before
   debugging from scratch.
 - `get-livetiming-info/src/app.py` usually has an edited debug block in the working

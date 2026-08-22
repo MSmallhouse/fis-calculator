@@ -117,6 +117,24 @@ here only because nothing else runs in this directory yet.
 
 So the scoring math and all three scrapers have **zero** automated safety net.
 
+### How changes here actually get verified
+
+Two techniques, both proven on 2026-08-21 for the python3.14 move and two crash fixes. Full recipes
+in [`get-livetiming-info.md`](get-livetiming-info.md#verifying-a-change-without-a-test-suite):
+
+- **Differential run** — capture the live Function URL's response for a known race *before* the
+  change, run the modified source in a `public.ecr.aws/lambda/python:3.14` container (mount
+  `~/.aws` read-only so the DynamoDB lookups work), diff the JSON. Codex **5279** is a known-good
+  case. Catches regressions across the scrapers, the lookups and the scoring in one shot — but only
+  on the paths that one race happens to touch.
+- **Synthetic edge cases** — build `scrapers.Competitor` objects by hand, set `.time` and
+  `.fis_points`, monkeypatch `utils.scrape_results` and `utils.connect_to_database`. Needs no
+  network and reaches everything a clean race misses: DNFs, ties, the penalty overrides, empty
+  fields, `Decimal` values from DynamoDB.
+
+Neither is a substitute for a suite, but together they are enough to say a change is safe with
+evidence rather than hope. **Use both, and say which you ran.**
+
 ### The actual workflow
 
 Uncomment the debug block at `get-livetiming-info/src/app.py:244-249`:
@@ -153,10 +171,12 @@ you cannot confirm it end-to-end — say so rather than implying you did.
 
 ### If you want tests here
 
-The thing to build is recorded fixtures from all three providers, mirroring the
-approach above: capture one real payload per provider (a live-timing AJAX blob, a
-Vola `GetHeatListValues` response, a FIS `main.xml` PHP-serialized dump), commit
-them, and test the parsers and the scoring math offline. The scoring math in
+The thing to build is recorded fixtures from all three providers, mirroring
+`get-points-list`: capture one real payload per provider (a live-timing AJAX blob,
+a Vola `GetHeatListValues` response, a FIS `main.xml` PHP-serialized dump), commit
+them, and test the parsers offline. The synthetic-edge-case technique above already
+covers the scoring math — formalising it as `pytest` cases is the cheapest first
+step and needs no fixtures at all. The scoring math in
 particular is pure and trivially testable — penalty, A/B/C, race points, the
 top-10 and top-5 rules, DNF handling. See
 [`points-calculation.md`](points-calculation.md) for what the expected values

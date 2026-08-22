@@ -32,16 +32,24 @@ Five things that cost real time to discover:
 | Handler | `app.lambda_handler` (`src/app.py:7`) |
 | Runtime | **python3.14** |
 | Memory / timeout | 3008 MB / 900 s — actual use is ~271 MB, ~55-120 s |
-| Layers | **none**; dependencies are bundled in the ~46 MB zip |
-| Trigger | EventBridge **Scheduler** `get-fis-points-nightly-run`, `cron(10 1 * * ? *)` America/New_York |
+| Layers | **none**; dependencies are bundled in the zip (deployed `CodeSize` 48,698,158 ≈ 46 MB) |
+| Concurrency | `ReservedConcurrentExecutions: 1` |
+| Trigger | EventBridge **Scheduler** `get-fis-points-nightly-run`, `cron(10 1 * * ? *)` America/New_York — **the only one** |
 
 `lambda_handler` does exactly two things (`src/app.py:12-13`): `fis_points_download(logger)` then
 `ussa_points_download(logger)`. There is no return value and no event parsing — the payload is
 ignored, so any invoke shape works.
 
-`template.yaml` also declares an API Gateway `GET /get-points-list` event. **Nothing uses it**; the
-scheduler invokes the function directly. It is an unauthenticated public trigger for a 3 GB / 900 s
-function that scans and rewrites DynamoDB — a standing cost-abuse hole and a deletion candidate.
+**This function has exactly one caller and no resource policy.** `template.yaml` used to declare an
+unauthenticated API Gateway `GET /get-points-list` event — a free public trigger for a 3 GB / 900 s
+function that scans and rewrites DynamoDB. Nothing ever called it (zero requests in 30 days), and it
+was removed 2026-08-21 along with the hand-added `apigateway.amazonaws.com` invoke permission that
+outlived it. The scheduler invokes through its own IAM role, so `get-policy` now returns
+`ResourceNotFoundException` — that is correct, not a misconfiguration.
+
+The concurrency cap follows from that: with a single daily trigger, anything concurrent is a bug or
+abuse, so a second invocation is throttled rather than quietly interleaving `get_item`/`update_item`
+calls with a run already in flight. It is a duplicate-run guard, not a cost guard.
 
 ## FIS path — `src/fis_points_download.py`
 
@@ -132,7 +140,7 @@ Probed 2026-08-21; these are facts about the server, not the code:
 - **No auth of any kind.** Bare `curl` with no headers gets the zip. The old spoofed header block
   including a `cf_clearance` Cloudflare token was inert and is gone.
 - **Missing files → HTTP 200, `content-type: text/html`, 4344 bytes**, beginning `<!DO`. Not a 404.
-  This is why `get_points_df` (`:223`) checks for `PK` magic bytes and `list_exists` checks
+  This is why `get_points_df` (`:220`) checks for `PK` magic bytes (`:223`) and `list_exists` checks
   content type. A `status_code != 200` test — which is what the old code did — never fires and lets
   HTML reach `zipfile.ZipFile()` as `BadZipFile`.
 - **`HEAD` works** and returns the distinguishing content type, so probing is cheap.

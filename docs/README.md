@@ -12,8 +12,8 @@ these files are pulled in on demand and go deep.
 | [get-points-list.md](get-points-list.md) | Touching the nightly ingest, or FIS/USSA points list downloads. |
 | [get-livetiming-info.md](get-livetiming-info.md) | Touching the calculator lambda or any of the three live-timing scrapers. |
 | [points-calculation.md](points-calculation.md) | Changing scoring: F-factors, penalty, A/B/C, event maximums, projections. |
-| [operations.md](operations.md) | Anything AWS: deploying, alarms, the schedule, "is it broken", cost exposure. |
-| [testing.md](testing.md) | Running or writing tests, or verifying a change without a live race. |
+| [operations.md](operations.md) | Anything AWS: deploying, alarms and alerting, the schedule, "is it broken", cost exposure. |
+| [testing.md](testing.md) | Running the `get-points-list` suite, or verifying a `get-livetiming-info` change that has no suite behind it. |
 
 ## Why these exist
 

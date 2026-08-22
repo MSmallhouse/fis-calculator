@@ -19,16 +19,18 @@ Ski racers carry FIS or USSA points (lower is better). A race's result produces 
 hours or days later. This project computes them live, mid-race, from whatever
 the timing provider has published so far.
 
-Two independent halves:
+Two independent halves, plus an alerting stack watching them:
 
 1. **Nightly ingest** — pull the current FIS and USSA points lists into DynamoDB
    so every racer's current points are known locally.
 2. **On-demand calculation** — a user pastes a live-timing URL (or picks a race
    off the FIS app list), and the calculator scrapes that race's current state,
    joins each starter to their stored points, and computes scores.
+3. **Alerting** (`alerts/`) — emails unhandled calculator errors immediately, and
+   digests unmatched-racer misses daily. See [`operations.md`](operations.md).
 
-The two halves share only the DynamoDB tables. They deploy separately and, as of
-Aug 2026, **run different Python versions** — see [runtimes](#runtimes).
+The two halves share only the DynamoDB tables and deploy separately. Both run
+**python3.14** as of Aug 2026 — see [runtimes](#runtimes).
 
 ## Data flow
 
@@ -48,6 +50,8 @@ flowchart TB
         GLI["get-livetiming-info<br/>on demand, Function URL<br/>python3.14"]
         T1[("points_list_dynamo_db<br/>~16k FIS racers")]
         T2[("ussa_points_list<br/>~3-20k USSA racers")]
+        ALERTS["alerts stack<br/>error notifier + daily digest"]
+        SNS(["SNS -> Matt's email"])
     end
 
     BROWSER["Browser on fiscalculator.com<br/>Jekyll site on GitHub Pages"]
@@ -67,6 +71,10 @@ flowchart TB
     T1 -->|"BatchGetItem by Fiscode"| GLI
     T2 -->|"full table scan + name match"| GLI
     GLI -->|"JSON results"| BROWSER
+
+    GLI -.->|"UNHANDLED ERROR / NAME_MATCH_MISS<br/>log lines"| ALERTS
+    ALERTS --> SNS
+    GPL -.->|"ERROR log lines<br/>(metric filter + alarm)"| SNS
 ```
 
 Note the asymmetry in the two reads from DynamoDB: FIS-livetiming races supply
@@ -86,7 +94,7 @@ holds only static assets. This trips people up constantly.
   privacy-policy.html
   _layouts/default.html  wraps every page
   _includes/             head.html, header.html, footer.html
-  _config.yml            EMPTY (0 bytes) - see below
+  _config.yml            ONLY an exclude list - see below
   CNAME                  www.fiscalculator.com
   ads.txt                Ezoic/AdSense
   website/               ASSETS ONLY: app.js, styles.css, images/
@@ -99,6 +107,9 @@ holds only static assets. This trips people up constantly.
     src/                 app.py, scrapers.py, utils.py, exceptions.py
     tests/               dead hello-world boilerplate
     template.yaml
+  alerts/                SAM app - error emails + daily name-match digest
+    src/                 error_notifier.py, digest.py
+    template.yaml        the ONE template that matches what is deployed
 ```
 
 ### Directories to never read
@@ -121,10 +132,33 @@ These will actively mislead you:
 main therefore republishes the site, which matters when committing lambda-only
 changes.
 
-**`_config.yml` is 0 bytes.** Jekyll runs on pure defaults. That is why every
-asset reference is a bare relative path (`website/app.js`, `website/styles.css`
-in `_includes/head.html`) rather than `{{ site.baseurl }}/...`. Don't "fix" this
+**`_config.yml` contains only an `exclude:` list.** No baseurl, no plugins —
+Jekyll otherwise runs on pure defaults, which is why every asset reference is a
+bare relative path (`website/app.js`, `website/styles.css` in
+`_includes/head.html`) rather than `{{ site.baseurl }}/...`. Don't "fix" this
 casually; the relative paths work precisely because there is no baseurl.
+
+The exclude list exists because without one **Jekyll copies the entire repo into
+the published site** — both lambdas' Python source was being served from the live
+domain (`/get-livetiming-info/src/app.py` returned 200 with real source). Adding
+it took the build from 62MB to 184K. Two things to remember:
+
+- Jekyll's `exclude` **replaces** its built-in list rather than extending it, so
+  the defaults worth keeping (`Gemfile`, `node_modules/`, `vendor/`) are re-listed
+  in the file.
+- **Any new top-level directory that isn't part of the site must be added there**,
+  or it gets published.
+
+To verify a site change without installing Jekyll:
+
+```bash
+docker run --rm -v "$PWD":/srv/jekyll -v /tmp/out:/out \
+  --entrypoint /bin/sh jekyll/jekyll:4 -c 'cd /srv/jekyll && jekyll build --destination /out'
+```
+
+then diff `/tmp/out` against the previous `_site/`. Note `privacy-policy.html:7`
+renders `{{ site.time }}`, so its "Last updated" date is the **build** date and
+shifts on every rebuild regardless of whether the policy changed.
 
 **Warm-up:** `_includes/head.html:1` preloads
 `https://hsa35mz4zsbu6nqwlb5jvkk4o40jruqd.lambda-url.us-east-2.on.aws/?url=preload`
@@ -220,7 +254,7 @@ FIS races get an extra column projecting next season's score (same math with the
 together:**
 
 - `website/app.js:84` — the literal `<th>2027 Score</th>`
-- `get-livetiming-info/src/app.py:274` — the response key `score2027`
+- `get-livetiming-info/src/app.py:276` — the response key `score2027`
 
 `app.js:231, 244-248, 254` also reference the `score2027` key. See
 [`operations.md`](operations.md) for the rest of the seasonal checklist.
@@ -298,7 +332,7 @@ Consequences, all of which live in `get-livetiming-info/src/utils.py`:
 | lambda | runtime | packaging |
 |---|---|---|
 | `get-points-list` | **python3.14** | deps bundled in the zip, ~46MB, no layers |
-| `get-livetiming-info` | **python3.14** | deps bundled in the zip, ~45MB, no layers |
+| `get-livetiming-info` | **python3.14** | deps bundled in the zip, ~47MB, no layers |
 
 Both moved to 3.14 in Aug 2026, and both pin `pandas>=2.3.3,<3` — 2.3.3 is the first
 release with cp314 wheels, and pandas 3.x changes copy-on-write and the default string

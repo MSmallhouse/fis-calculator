@@ -170,7 +170,7 @@ Three magic numbers flow through the calculation. Knowing which is which saves r
 | `-1` (score) | did not finish — filtered from output | `src/app.py:192` |
 
 `1000` is the initial value on every `Competitor`, so "not found" is really "nothing ever
-overwrote it". Those names are collected into the `notFound` response field (`src/app.py:260-261`)
+overwrote it". Those names are collected into the `notFound` response field (`src/app.py:262-263`)
 and shown as a warning above the results table.
 
 ### The USSA wrinkle
@@ -223,7 +223,7 @@ Normalized to a single representation everywhere: `time = 9999`.
 - Excluded from the top-10 group (`src/app.py:125-126`).
 - Given `score = -1` in `assign_scores` (`src/app.py:191-193`) and **no** `next_year_score`, which
   is why that attribute keeps its `-1` initial value.
-- Filtered out of the response at `src/app.py:264`.
+- Filtered out of the response at `src/app.py:266`.
 
 Each scraper also has provider-specific DNF detection before this point — see
 [get-livetiming-info](get-livetiming-info.md).
@@ -282,7 +282,10 @@ them.
 | `B` uses all starters, not the seed | `src/app.py:171` | live TODO; needs start order from the scrapers |
 | `is_tech_race` stays `True` for `ACpoints` | `src/app.py:44-45` | latent; AC not exposed in the form |
 | `counter999` override is FIS-only | `src/app.py:165` | but USSA races are likelier to hit the condition |
-| tie-for-10th loop has no bounds check | `src/app.py:133` | `IndexError` if all times are equal |
-| `hasThirdRun` reads `output[0]` | `src/app.py:301` | `IndexError` when no finishers |
-| duplicate `place` key | `src/app.py:269-270` | first is dead code |
+| duplicate `place` key | `src/app.py:271-272` | first is dead code |
 | no tests at all | — | see [testing](testing.md) |
+
+Two `IndexError`s that used to sit in this table were **fixed 2026-08-21** (commit `040816e`): the
+unbounded tie-for-10th walk (`src/app.py:133`, now length-guarded) and `hasThirdRun` reading
+`output[0]` on an empty field (`src/app.py:315`, now `bool(output) and ...`). Both reached users as
+a generic 500. Details in [get-livetiming-info](get-livetiming-info.md#fixed-crashes-worth-knowing-about).
