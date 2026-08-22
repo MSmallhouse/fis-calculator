@@ -86,7 +86,6 @@ three source lines, so literal newlines and indentation are embedded before `&mi
       "name": "SMITH, John",
       "score": 42.15,
       "points": 38.22,         // the racer's current list points
-      "score2027": 50.15,      // score using next_year_penalty
       // the following only appear when they exist:
       "r1_time": "52.31", "r1_rank": 3,
       "r2_time": "51.88", "r2_rank": 1,
@@ -509,8 +508,7 @@ When something breaks, in rough order of likelihood:
 
 ## Seasonal maintenance
 
-- **`score2027`** is hardcoded to one season in two places that must change together: the response
-  key at `src/app.py:276`, and the column header `<th>2027 Score</th>` at `website/app.js:84`
+- ~~`score2027`~~ — removed Aug 2026. The adder is now part of the single `penalty`, so there is one `score`. See [points-calculation.md](points-calculation.md).
   (with reads at `website/app.js:244-248`). Deriving it from `race.adder` and the current date
   would remove the chore.
 - **F-factors and event maximums** (`src/app.py:10-23`, `:34-45`) are FIS rulebook constants.

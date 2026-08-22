@@ -82,15 +82,14 @@ A, C = self.get_A_and_C()
 B = self.get_B(starting_racers_points)
 penalty = max(((A+B-C)/10), self.min_penalty)
 self.penalty = round(penalty, 2)
-self.next_year_penalty = round(max(((A+B-C)/10) + self.adder, self.min_penalty), 2)
+self.penalty = round(max(((A+B-C)/10) + self.adder, self.min_penalty), 2)
 ```
 
-Note where `adder` lands in `next_year_penalty`: **inside** the `max`, added to the computed value
+Note where `adder` lands: **inside** the `max`, added to the computed value
 before the floor is applied — not added afterwards. So a race that bottoms out at `min_penalty`
 gets the same value for both, rather than `min_penalty + adder`.
 
-`next_year_penalty` feeds `next_year_score` (`src/app.py:195`), surfaced as the `score2027` response
-field. That key name is hardcoded per season — see the seasonal notes in
+Until Aug 2026 there were two penalties — one with the adder, one without — surfaced as `score` and `score2027`. The 2027 season made the adder unconditional, so there is now a single `penalty` and a single `score`. Categories with `adder: 0` (Noram/Europa Cup, World Cup, USSA) are unaffected; the `8`-adder categories score up to 8 points higher than they used to.
 [get-livetiming-info](get-livetiming-info.md).
 
 ---
@@ -208,7 +207,7 @@ if counter999 >= 3 and self.is_fis_race:
 ```
 
 **This mutates `self.min_penalty` on the `Race` object**, so it changes the floor used by the
-`max()` in `calculate_penalty` for both `penalty` and `next_year_penalty`. Note it is gated on
+`max()` in `calculate_penalty`. Note it is gated on
 `is_fis_race` and only ever reads `FIS_EVENT_MAXIMUMS` — a USSA race never gets this override even
 though, as noted above, USSA races are the ones most likely to have three unscored racers up front.
 Whether that gating is intended is a question for Matt.
@@ -221,7 +220,7 @@ Normalized to a single representation everywhere: `time = 9999`.
   `TIMES_AS_LETTERS` (`{"DNF","DNS","DSQ","DQ","Did Not Finish","Did Not Start","Disqualified"}`,
   `src/scrapers.py:7`), or doesn't start with a digit or colon.
 - Excluded from the top-10 group (`src/app.py:125-126`).
-- Given `score = -1` in `assign_scores` (`src/app.py:191-193`) and **no** `next_year_score`, which
+- Given `score = -1` in `assign_scores` (`src/app.py:191-193`), which
   is why that attribute keeps its `-1` initial value.
 - Filtered out of the response at `src/app.py:266`.
 

@@ -48,7 +48,6 @@ class Race:
         self.competitors = []
         self.winning_time = 9999
         self.penalty = 0
-        self.next_year_penalty = 0
 
         self.url_type = ''
         if 'vola' in url:
@@ -113,9 +112,11 @@ class Race:
     def calculate_penalty(self, starting_racers_points):
         A, C = self.get_A_and_C()
         B = self.get_B(starting_racers_points)
-        penalty = max(((A+B-C)/10), self.min_penalty)
+        # the adder is part of the penalty from the 2027 season onward. Before
+        # that the site showed both the with- and without-adder figures side by
+        # side; only this one is current now.
+        penalty = max(((A+B-C)/10) + self.adder, self.min_penalty)
         self.penalty = round(penalty, 2)
-        self.next_year_penalty = round( max(((A+B-C)/10) + self.adder, self.min_penalty), 2 )
         return
 
     def get_A_and_C(self):
@@ -192,7 +193,6 @@ class Race:
                 competitor.score = -1
                 continue
             competitor.score = round(get_race_points(competitor, self) + self.penalty, 2)
-            competitor.next_year_score = round(get_race_points(competitor, self) + self.next_year_penalty, 2)
         return
 
 def time_sort(competitor):
@@ -273,7 +273,6 @@ def handler(event, context):
                 "name": competitor.full_name,
                 "score": competitor.score,
                 "points": competitor.fis_points,
-                "score2027": competitor.next_year_score,
                 # only include run time and ranks if they exist
                 **(
                     {

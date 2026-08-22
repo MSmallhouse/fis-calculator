@@ -244,17 +244,18 @@ improvement). If some racers' points weren't found, a "results might be off,
 points not found for:" warning is prepended (`app.js:145-152`). Results
 `scrollIntoView` on completion.
 
-### The seasonal "2027 Score" column
+### One score, not two
 
-FIS races get an extra column projecting next season's score (same math with the
-`adder` applied). **The season is hardcoded in two places that must be bumped
-together:**
+Until Aug 2026 the site showed two score columns: `Score` (penalty without the adder)
+and `2027 Score` (penalty with it). The 2027 season is now current, so the adder is
+simply part of the penalty and only one figure is shown. The response key is `score`;
+`score2027` and `next_year_penalty`/`next_year_score` are gone.
 
-- `website/app.js:84` — the literal `<th>2027 Score</th>`
-- `get-livetiming-info/src/app.py:276` — the response key `score2027`
+Consequence worth knowing: for categories whose adder is `0` — Noram/Europa Cup, World
+Cup, USSA — nothing changed. For the `8`-adder categories (Open FIS, National
+Championship, Entry League, Citizen) the displayed score is now up to 8 points higher
+than it used to be, unless `min_penalty` was already flooring it.
 
-`app.js:231, 244-248, 254` also reference the `score2027` key. See
-[`operations.md`](operations.md) for the rest of the seasonal checklist.
 
 ## DynamoDB
 
