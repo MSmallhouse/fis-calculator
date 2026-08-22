@@ -18,6 +18,10 @@ Resources:
     Type: AWS::Serverless::Function 
     Properties:
       Handler: app.lambda_handler
+      # Only the nightly EventBridge Scheduler schedule invokes this, so anything
+      # concurrent is a bug or abuse. Cap at 1 so a second invocation is visibly
+      # throttled rather than quietly running the ingest twice over the same tables.
+      ReservedConcurrentExecutions: 1
       CodeUri: src/
       # No event source. The nightly run is an EventBridge Scheduler schedule
       # (get-fis-points-nightly-run) that invokes this function directly. There
