@@ -130,7 +130,7 @@ class Race:
         # consider all ties to have finished in the top 10 per fis rules
         if len(self.competitors) > 10:
             i = 10
-            while self.competitors[i].time == self.competitors[9].time and self.competitors[i].time != 9999 and self.competitors[9].time != 9999:
+            while i < len(self.competitors) and self.competitors[i].time == self.competitors[9].time and self.competitors[i].time != 9999 and self.competitors[9].time != 9999:
                 top_ten_finishers.append(self.competitors[i])
                 i += 1
         
@@ -312,7 +312,7 @@ def handler(event, context):
             "hasRunTimes": True,
             "areScoresProjections": race.are_scores_projections,
             "notFound": points_not_found,
-            "hasThirdRun": 'r3_time' in output[0].keys(),
+            "hasThirdRun": bool(output) and 'r3_time' in output[0],
             "isStartlist": race.is_startlist_only,
             "isFisRace": race.is_fis_race,
         }
