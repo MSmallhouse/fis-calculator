@@ -121,9 +121,6 @@ These will actively mislead you:
 | `get-livetiming-info/_site/` | **a stale copy of `src/`.** All three modules differ from live `src/`. Reading it will give you wrong line numbers and wrong logic. |
 | `_site/`, `.jekyll-cache/` | Jekyll build output, untracked |
 | `.aws-sam/` | SAM build output |
-| `get-livetiming-info/pandas-layer/` | 123MB prebuilt layer, referenced by nothing and attached to nothing — pure dead weight |
-| `*template-copy.yaml`, `*template.backup.yaml` | stale templates (python3.9 / Docker-image era) |
-| `get-points-list/src/Dockerfile` | dead, only referenced by the gitignored backup template; still says `python:3.10` |
 
 ## The website
 

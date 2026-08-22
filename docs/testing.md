@@ -107,7 +107,7 @@ FIS half is instead smoke-tested by hand when touched — see
 `get-livetiming-info/tests/unit/test_handler.py` is **unmodified SAM hello-world
 boilerplate**. It does `from hello_world import app` — a module that does not
 exist in this repo — and asserts `data["message"] == "hello world"`. It fails at
-collection with `ModuleNotFoundError`. `events/event.json` is the matching
+collection with `ModuleNotFoundError`. Both were deleted on 2026-08-21, along with the matching
 untouched fixture and contains none of the real query parameters, so
 `sam local invoke` against it cannot exercise the handler either.
 

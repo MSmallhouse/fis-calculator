@@ -297,9 +297,9 @@ Still missing from IaC:
 
 A clean `sam deploy` into a fresh account would produce a non-working system.
 
-**Fixed since:** `get-points-list/template.yaml` now matches reality on runtime (`python3.14`), `ReservedConcurrentExecutions: 1`, and the absence of an event source. There is **no pandas layer** — neither function has ever had one (`Layers: null` on both); dependencies are bundled in the zips. The repo's `get-livetiming-info/pandas-layer/` directory is 123 MB of dead weight referenced by nothing.
+**Fixed since:** `get-points-list/template.yaml` now matches reality on runtime (`python3.14`), `ReservedConcurrentExecutions: 1`, and the absence of an event source. There is **no pandas layer** — neither function has ever had one (`Layers: null` on both); dependencies are bundled in the zips. The repo's `get-livetiming-info/pandas-layer/` directory was deleted on 2026-08-21.
 
-Also stale in-repo: `template-copy.yaml` and `template.backup.yaml` (python3.9 / Docker-image era), and `get-points-list/src/Dockerfile` (still `python:3.10`, referenced only by the gitignored backup template).
+The stale in-repo leftovers — `template-copy.yaml`, `template.backup.yaml` and `get-points-list/src/Dockerfile` — were all deleted on 2026-08-21.
 
 ---
 

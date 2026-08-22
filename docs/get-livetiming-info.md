@@ -18,8 +18,10 @@ Five things that cost the most time to rediscover:
    [Verifying a change without a test suite](#verifying-a-change-without-a-test-suite). See
    [testing](testing.md).
 2. **`get-livetiming-info/_site/` contains a stale copy of `src/`.** Jekyll build output that got
-   committed once. Grep hits in there are lies. Same for `template-copy.yaml` (python3.9).
-3. **`pandas-layer/` is dead.** 123MB on disk, referenced by nothing, and the deployed function
+   committed once, so grep hits in there were lies. Deleted 2026-08-21 along with
+   `template-copy.yaml` (python3.9). `jekyll build` can recreate a `_site/` — do not read it.
+3. **There is no pandas layer.** A 123MB `pandas-layer/` directory sat in the repo until
+   2026-08-21, referenced by nothing. The deployed function
    reports `Layers: null` — and always has. Dependencies are bundled in the ~47MB function zip.
    It never blocked the python3.14 move. See [Runtime](#runtime).
 4. **The site calls a Lambda Function URL, not the API Gateway in `template.yaml`.**
@@ -168,7 +170,7 @@ unmaintained since 2016 — installs and round-trips fine on 3.14.
 A note on a claim you may find elsewhere: the `pandas-layer/` directory was long assumed to block
 this upgrade, because its path is hardcoded to `python/lib/python3.10/site-packages`. That was
 wrong. **The deployed function has `Layers: null`** and always has; dependencies are bundled in
-the function zip. `pandas-layer/` is 123MB of dead weight referenced by nothing.
+the function zip. The `pandas-layer/` directory was deleted on 2026-08-21.
 
 ## Verifying a change without a test suite
 
@@ -477,7 +479,7 @@ Selected at `src/utils.py:266-276`:
 | | template says | actually deployed |
 |---|---|---|
 | invoke path | API Gateway `GET /get-livetiming-info` | **Lambda Function URL**, `AuthType: NONE`, `CORS: *` |
-| layers | none declared | none attached (`Layers: null`) — `pandas-layer/` is unused |
+| layers | none declared | none attached (`Layers: null`), never were |
 | DynamoDB access | implicit SAM role, no policies | policies attached by hand |
 | CORS | **absent entirely** | configured on the Function URL |
 

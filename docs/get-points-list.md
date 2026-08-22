@@ -233,7 +233,6 @@ and S3 deploy (the 46 MB zip exceeds the comfortable direct-upload margin).
 
 ## Dead weight
 
-- `events/event.json` — unmodified SAM hello-world fixture, has none of the real parameters.
-- `src/Dockerfile` — still says `python:3.10`; only referenced by the gitignored
-  `template.backup.yaml` from the retired container-image deployment.
-- `template.backup.yaml` — gitignored, python3.9 / `PackageType: Image` era.
+All of it was deleted on 2026-08-21: `events/event.json` (hello-world fixture),
+`src/Dockerfile` (`python:3.10`, retired container-image path) and `template.backup.yaml`.
+The ECR repository that path pushed to is gone too. If any of them reappear, they are junk.
